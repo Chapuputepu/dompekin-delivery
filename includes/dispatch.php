@@ -80,10 +80,11 @@ function dpd_finish_blocked($order, $token, $reason) {
 }
 
 function dpd_delivery_address($order) {
-    $parts = $order->get_formatted_shipping_address();
-    if (!is_string($parts) || trim(wp_strip_all_tags($parts)) === '') {
-        $parts = $order->get_formatted_billing_address();
-    }
-    $address = trim(preg_replace('/\s+/u', ' ', wp_strip_all_tags((string) $parts)), " ,");
-    return $address === '' ? new WP_Error('dpd_noaddress', 'В заказе нет адреса доставки.') : $address;
+    // Берём город + улица + дом из полей заказа.
+    // Старый вариант склеивал HTML-адрес без разделителей ("...домофон 17Новосибирск").
+    $normalized = dpd_order_address($order);
+    $address = $normalized['text'];
+    if ($address === '') { return new WP_Error('dpd_noaddress', 'В заказе нет адреса доставки.'); }
+    if (!$normalized['has_street_number']) { return new WP_Error('dpd_nonumber', 'В адресе клиента нет номера дома.'); }
+    return $address;
 }

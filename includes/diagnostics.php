@@ -1,30 +1,18 @@
 <?php
 if (!defined('ABSPATH')) { exit; }
 
-/** Collects address-assembly facts without guessing. */
+/** Сборка адреса через нормализованные поля (город + улица + дом). */
 function dpd_address_sources($order) {
+    $norm = dpd_order_address($order);
+
     $out = array();
-    $shipping_formatted = trim(wp_strip_all_tags((string) $order->get_formatted_shipping_address()));
-    $shipping_parts = trim(wp_strip_all_tags(
-        $order->get_shipping_address_1() . ' ' . $order->get_shipping_address_2() . ', ' . $order->get_shipping_city()
-    ), " ,");
-    $billing_formatted = trim(wp_strip_all_tags((string) $order->get_formatted_billing_address()));
-    $billing_parts = trim(wp_strip_all_tags(
-        $order->get_billing_address_1() . ' ' . $order->get_billing_address_2() . ', ' . $order->get_billing_city()
-    ), " ,");
-
-    $used = 'none';
-    $address = '';
-    if ($shipping_formatted !== '') { $used = 'адрес доставки (сформ.)'; $address = $shipping_formatted; }
-    elseif ($shipping_parts !== '') { $used = 'поля доставки'; $address = $shipping_parts; }
-    elseif ($billing_formatted !== '') { $used = 'платёжный адрес (сформ.)'; $address = $billing_formatted; }
-    elseif ($billing_parts !== '') { $used = 'поля платёжного адреса'; $address = $billing_parts; }
-
-    $out['used'] = $used;
-    $out['address'] = trim(preg_replace('/\s+/u', ' ', $address), " ,");
-    $out['length'] = strlen($out['address']);
-    $out['has_shipping'] = ($shipping_formatted !== '' || $shipping_parts !== '');
-    $out['has_billing'] = ($billing_formatted !== '' || $billing_parts !== '');
+    $out['used'] = $norm['source'];
+    $out['address'] = $norm['text'];
+    $out['length'] = $norm['length'];
+    $out['raw_formatted'] = $norm['raw_formatted'];
+    $out['has_number'] = $norm['has_street_number'];
+    $out['has_shipping'] = dpd_clean_text($order->get_shipping_address_1()) !== '';
+    $out['has_billing'] = dpd_clean_text($order->get_billing_address_1()) !== '';
     $out['phone'] = trim((string) $order->get_billing_phone());
     return $out;
 }
@@ -35,9 +23,20 @@ function dpd_geocoder_key_present() {
     return is_string($key) && $key !== '';
 }
 
-/** Runs the same geocoder used by the site and reports the exact outcome. */
+/** Runs the same geocoder used by the site; обходит отрицательный кэш повторной попыткой. */
 function dpd_geocode_report($address) {
     if (!function_exists('dp_zone_geocode')) { return array('state' => 'missing_function'); }
+    $first = dpd_geocode_once($address);
+    if ($first['state'] === 'found') { $first['attempts'] = 1; return $first; }
+    // Отрицательный результат мог быть закэширован на 30 дней — пробуем свежий запрос.
+    $cleared = dpd_clear_address_cache($address);
+    $second = dpd_geocode_once($address);
+    $second['attempts'] = 2;
+    $second['cache_cleared'] = (bool) $cleared;
+    return $second;
+}
+
+function dpd_geocode_once($address) {
     $result = dp_zone_geocode($address);
     if (is_wp_error($result)) { return array('state' => 'wp_error', 'code' => $result->get_error_code(), 'message' => $result->get_error_message()); }
     if (!is_array($result)) { return array('state' => 'bad_shape'); }

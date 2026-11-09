@@ -32,9 +32,12 @@ function dpd_distance_km($address) {
     if (!function_exists('dp_zone_geocode')) { return new WP_Error('dpd_geo_missing', 'Геокодер темы недоступен.'); }
     $origin = dpd_restaurant_point();
     if (is_wp_error($origin)) { return $origin; }
-    $geo = dp_zone_geocode($address);
-    if (is_wp_error($geo)) { return new WP_Error('dpd_geo_error', 'Геокодер вернул ошибку: ' . $geo->get_error_message()); }
-    if (!is_array($geo) || empty($geo['found'])) { return new WP_Error('dpd_geo_notfound', 'Геокодер не подтвердил адрес доставки с нужной точностью.'); }
+    // dpd_geocode_report повторяет запрос после сброса отрицательного кэша.
+    $report = dpd_geocode_report($address);
+    if ($report['state'] === 'wp_error') { return new WP_Error('dpd_geo_error', 'Геокодер вернул ошибку: ' . $report['code'] . '. Адрес клиента ни при чём.'); }
+    if ($report['state'] === 'missing_function') { return new WP_Error('dpd_geo_missing', 'Геокодер темы недоступен.'); }
+    if ($report['state'] !== 'found') { return new WP_Error('dpd_geo_notfound', 'Геокодер не подтвердил адрес доставки. Проверьте адрес: ' . $address); }
+    $geo = $report;
     $lat1 = deg2rad($origin['lat']); $lat2 = deg2rad((float) $geo['lat']);
     $dLat = $lat2 - $lat1; $dLon = deg2rad((float) $geo['lon'] - $origin['lon']);
     $a = sin($dLat / 2) ** 2 + cos($lat1) * cos($lat2) * sin($dLon / 2) ** 2;
