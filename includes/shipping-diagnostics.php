@@ -147,7 +147,8 @@ function dpd_render_shipping_check() {
         } else {
             echo '<ul>';
             foreach ($calc['rates'] as $r) {
-                echo '<li><code>' . esc_html($r['id']) . '</code> — ' . esc_html($r['label']) . ' — ' . esc_html($r['cost']) . '</li>';
+                $zero = ((float) $r['cost'] === 0.0 && strpos($r['id'], 'local_pickup') !== 0);
+                echo '<li>' . ($zero ? '<strong style="color:#b32d2e">[0 ₽ — оплата за счёт ресторана]</strong> ' : '') . '<code>' . esc_html($r['id']) . '</code> — ' . esc_html($r['label']) . ' — ' . esc_html($r['cost']) . '</li>';
             }
             echo '</ul>';
         }
