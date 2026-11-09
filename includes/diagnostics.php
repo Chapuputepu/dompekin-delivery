@@ -143,13 +143,15 @@ function dpd_relay_check_address($order_id) {
     if (trim((string) $src['phone']) === '') { return array('status' => 'fail', 'detail' => 'В заказе не заполнен телефон получателя — Достависта его требует.'); }
     $payload = dpd_build_payload($order, $origin, 6);
     if (is_wp_error($payload)) { return array('status' => 'fail', 'detail' => $payload->get_error_message()); }
+    $token = (string) dpd_active_token();
+    $env_label = 'Хост: ' . dpd_api_host() . ' | токен: ' . (dpd_is_test() ? 'тестовый' : 'БОЕВОЙ') . ' | длина ' . strlen($token) . '. ';
     $response = dpd_api_request('calculate-order', $payload);
-    if (is_wp_error($response)) { return array('status' => 'fail', 'detail' => 'Сеть или ключ: ' . $response->get_error_message()); }
+    if (is_wp_error($response)) { return array('status' => 'fail', 'detail' => $env_label . 'Сеть или ключ: ' . $response->get_error_message()); }
     $status = is_array($response) ? (int) ($response['status'] ?? 0) : 0;
     $raw = is_array($response) ? (string) ($response['body'] ?? '') : '';
     $data = json_decode($raw, true);
     if (!is_array($data)) {
-        return array('status' => 'fail', 'detail' => 'HTTP ' . $status . '. Ответ не JSON: ' . dpd_safe_snippet($raw));
+        return array('status' => 'fail', 'detail' => $env_label . 'HTTP ' . $status . '. Ответ не JSON: ' . dpd_safe_snippet($raw));
     }
     if (($data['is_successful'] ?? null) !== true) {
         $details = array();
@@ -158,7 +160,7 @@ function dpd_relay_check_address($order_id) {
                 if (is_array($err)) { $details[] = trim(((string) ($err['field'] ?? '')) . ' ' . ((string) ($err['code'] ?? '')) . ' ' . ((string) ($err['message'] ?? ''))); }
             }
         }
-        return array('status' => 'fail', 'detail' => 'HTTP ' . $status . '. Достависта отклонила расчёт: ' . (($details ? implode('; ', $details) : dpd_safe_snippet($raw))));
+        return array('status' => 'fail', 'detail' => $env_label . 'HTTP ' . $status . '. Достависта отклонила расчёт: ' . (($details ? implode('; ', $details) : dpd_safe_snippet($raw))));
     }
     $warnings = is_array($data['warnings'] ?? null) ? $data['warnings'] : array();
     $amount = $data['order']['payment_amount'] ?? '—';
