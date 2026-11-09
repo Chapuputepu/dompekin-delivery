@@ -167,7 +167,9 @@ function dpd_relay_check_address($order_id) {
     if (!$order) { return array('status' => 'fail', 'detail' => 'Заказ не найден.'); }
     $origin = dpd_origin();
     $src = dpd_address_sources($order);
-    if (is_wp_error($origin) || $src['address'] === '') { return array('status' => 'fail', 'detail' => 'Не хватает адреса ресторана или клиента.'); }
+    if (is_wp_error($origin)) { return array('status' => 'fail', 'detail' => 'Точка забора не задана: ' . $origin->get_error_message()); }
+    if ($src['address'] === '') { return array('status' => 'fail', 'detail' => 'В заказе нет адреса клиента (ни доставки, ни платёжного).'); }
+    if (trim((string) $src['phone']) === '') { return array('status' => 'fail', 'detail' => 'В заказе не заполнен телефон получателя — Достависта его требует.'); }
     $payload = dpd_build_payload($order, $origin, 6);
     if (is_wp_error($payload)) { return array('status' => 'fail', 'detail' => $payload->get_error_message()); }
     $data = dpd_json(dpd_api_request('calculate-order', $payload));
