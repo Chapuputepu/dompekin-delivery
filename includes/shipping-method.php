@@ -66,14 +66,17 @@ function dpd_define_courier_method() {
             return parent::is_available($package);
         }
 
-        /** Проверка города без mbstring: PCRE с флагом u. */
-        public function dpd_city_allowed($city) {
+        /** Проверка города без mbstring: PCRE с флагом u. Индекс Новосибирска — 630xxx. */
+        public function dpd_city_allowed($city, $postcode = '') {
             $wanted = trim((string) $this->get_option('city', 'Новосибирск'));
             if ($wanted === '') { return true; }
             $city = trim((string) $city);
-            if ($city === '') { return false; }
-            $pattern = '/' . preg_quote($wanted, '/') . '/iu';
-            return (bool) preg_match($pattern, $city);
+            if ($city !== '') {
+                $pattern = '/' . preg_quote($wanted, '/') . '/iu';
+                if (preg_match($pattern, $city)) { return true; }
+            }
+            $postcode = trim((string) $postcode);
+            return (bool) preg_match('/^630\d{3}$/', $postcode);
         }
 
         public function dpd_cart_subtotal($package) {
@@ -86,7 +89,8 @@ function dpd_define_courier_method() {
 
         public function calculate_shipping($package = array()) {
             $city = isset($package['destination']['city']) ? $package['destination']['city'] : '';
-            if (!$this->dpd_city_allowed($city)) { return; }
+            $postcode = isset($package['destination']['postcode']) ? $package['destination']['postcode'] : '';
+            if (!$this->dpd_city_allowed($city, $postcode)) { return; }
 
             $cost = (float) $this->get_option('cost', 145);
             $free_from = (float) $this->get_option('free_from', 4000);
@@ -114,4 +118,32 @@ function dpd_register_shipping_method($methods) {
         $methods['dpd_courier'] = 'WC_Shipping_Dpd_Courier';
     }
     return $methods;
+}
+
+/**
+ * Замок на самовывоз: если сторонний фильтр срезал ВСЕ тарифы (типичный случай —
+ * адрес вне зоны доставки), возвращаем самовывоз из настроек зоны.
+ * Работает только при пустом списке, поэтому не создаёт лишних вариантов.
+ */
+add_filter('woocommerce_package_rates', 'dpd_ensure_pickup_rate', 999, 2);
+function dpd_ensure_pickup_rate($rates, $package) {
+    if (!empty($rates)) { return $rates; }
+    if (!class_exists('WC_Shipping_Rate') || !class_exists('WC_Shipping_Zones')) { return $rates; }
+
+    $zone = WC_Shipping_Zones::get_zone_matching_package($package);
+    if (!$zone) { return $rates; }
+
+    foreach ($zone->get_shipping_methods(true) as $method) {
+        if ($method->id !== 'local_pickup' || $method->enabled !== 'yes') { continue; }
+        $rate = new WC_Shipping_Rate(
+            $method->get_rate_id(),
+            $method->get_title(),
+            0,
+            array(),
+            $method->id,
+            $method->instance_id
+        );
+        $rates[$rate->get_id()] = $rate;
+    }
+    return $rates;
 }
