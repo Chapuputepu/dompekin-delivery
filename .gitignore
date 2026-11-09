@@ -1,0 +1,12 @@
+# Запрещённые для публичного репозитория данные
+*.log
+*.sql
+*.sql.gz
+*.zip
+.env
+.wp-config.php
+wp-config.php
+private-site-copy/
+docs/
+drafts/
+node_modules/

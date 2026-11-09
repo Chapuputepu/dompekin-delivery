@@ -1,0 +1,89 @@
+<?php
+if (!defined('ABSPATH')) { exit; }
+
+function dpd_on_stage_meta($meta_id, $object_id, $meta_key, $meta_value) {
+    if ($meta_key !== '_dp_stage' || $meta_value !== 'cooking') { return; }
+    if (!dpd_enabled()) { return; }
+    if (!dpd_active_token()) { return; }
+    if (get_post_meta($object_id, '_dpd_carrier_id', true)) { return; }
+    $args = array((int) $object_id);
+    if (wp_next_scheduled('dpd_dispatch_order', $args)) { return; }
+    wp_schedule_single_event(time() + 5, 'dpd_dispatch_order', $args);
+}
+
+function dpd_order_ready($order) {
+    if (!dpd_enabled()) { return new WP_Error('dpd_off', 'Плагин выключен.'); }
+    if (dpd_active_token() === '') { return new WP_Error('dpd_nokey', 'Не задан токен Достависты.'); }
+    if (!$order->is_paid()) { return new WP_Error('dpd_unpaid', 'Оплата не подтверждена.'); }
+    if ($order->get_meta('_dp_stage') !== 'cooking') { return new WP_Error('dpd_notaccepted', 'Заказ ещё не принят рестораном.'); }
+    if ($order->get_meta('_dpd_carrier_id')) { return new WP_Error('dpd_exists', 'Доставка уже создана.'); }
+    if (!$order->needs_shipping_address() && $order->get_shipping_method() === '') { return new WP_Error('dpd_nodelivery', 'Заказ не является доставкой.'); }
+    return true;
+}
+
+function dpd_run_dispatch($order_id) {
+    $order_id = (int) $order_id;
+    $order = wc_get_order($order_id);
+    if (!$order) { return; }
+    $ready = dpd_order_ready($order);
+    if (is_wp_error($ready)) { return; }
+    $existing = dpd_lock_read($order_id);
+    if (is_array($existing)) { return; } // never re-dispatch an existing attempt
+
+    $token = bin2hex(random_bytes(16));
+    if (!dpd_lock_reserve($order_id, $token)) { return; }
+
+    // Persist uncertainty BEFORE any network request: a crash must never cause a blind retry.
+    if (!dpd_lock_transition($order_id, $token, 'reserved', 'uncertain')) { return; }
+
+    $origin = dpd_origin();
+    if (is_wp_error($origin)) { dpd_finish_blocked($order, $token, $origin->get_error_message()); return; }
+
+    $address = dpd_delivery_address($order);
+    if (is_wp_error($address)) { dpd_finish_blocked($order, $token, $address->get_error_message()); return; }
+
+    $distance = dpd_distance_km($address);
+    if (is_wp_error($distance)) { dpd_finish_blocked($order, $token, $distance->get_error_message()); return; }
+
+    $payload = dpd_build_payload($order, $origin, dpd_vehicle_for($distance));
+    if (is_wp_error($payload)) { dpd_finish_blocked($order, $token, $payload->get_error_message()); return; }
+
+    $calc = dpd_json(dpd_api_request('calculate-order', $payload));
+    if (!is_array($calc) || ($calc['is_successful'] ?? null) !== true) { dpd_finish_blocked($order, $token, 'Достависта не подтвердила расчёт доставки.'); return; }
+    if (!isset($calc['warnings']) || !is_array($calc['warnings']) || $calc['warnings'] !== array()) { dpd_finish_blocked($order, $token, 'Достависта вернула предупреждения по заявке.'); return; }
+    $amount = dpd_amount_minor($calc['order']['payment_amount'] ?? null);
+    if ($amount === null) { dpd_finish_blocked($order, $token, 'Некорректная сумма расчёта.'); return; }
+
+    $created = dpd_api_request('create-order', $payload);
+    $data = dpd_json($created);
+    $carrier_id = (is_array($data) && ($data['is_successful'] ?? null) === true) ? ($data['order']['order_id'] ?? null) : null;
+    if (!is_int($carrier_id) || $carrier_id <= 0) {
+        // Unknown outcome: keep 'uncertain' and require manual reconciliation.
+        $order->add_order_note('Dompekin Delivery: результат создания заявки неизвестен. Автоматического повтора не будет; требуется сверка в кабинете Достависты.');
+        return;
+    }
+    if (!dpd_lock_transition($order_id, $token, 'uncertain', 'created', $carrier_id)) {
+        $order->add_order_note('Dompekin Delivery: заявка создана, но состояние не сохранилось. Требуется сверка; не создавать повторно.');
+        return;
+    }
+    $order->update_meta_data('_dpd_carrier_id', $carrier_id);
+    $order->update_meta_data('_dpd_state', 'created');
+    $order->add_order_note(sprintf('Dompekin Delivery: заявка создана, ID %d. Среда: %s. Расчёт: %s ₽.', $carrier_id, dpd_is_test() ? 'тест' : 'боевая', number_format_i18n($amount / 100, 2)));
+    $order->save();
+}
+
+function dpd_finish_blocked($order, $token, $reason) {
+    dpd_lock_transition($order->get_id(), $token, 'uncertain', 'blocked');
+    $order->update_meta_data('_dpd_state', 'blocked');
+    $order->add_order_note('Dompekin Delivery: заявка не отправлена. ' . $reason);
+    $order->save();
+}
+
+function dpd_delivery_address($order) {
+    $parts = $order->get_formatted_shipping_address();
+    if (!is_string($parts) || trim(wp_strip_all_tags($parts)) === '') {
+        $parts = $order->get_formatted_billing_address();
+    }
+    $address = trim(preg_replace('/\s+/u', ' ', wp_strip_all_tags((string) $parts)), " ,");
+    return $address === '' ? new WP_Error('dpd_noaddress', 'В заказе нет адреса доставки.') : $address;
+}
