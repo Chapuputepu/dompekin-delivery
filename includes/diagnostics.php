@@ -131,9 +131,12 @@ function dpd_safe_snippet($text) {
     return (function_exists('mb_substr') ? mb_substr($text, 0, 300, 'UTF-8') : substr($text, 0, 300));
 }
 
-/** Optional: ask Dostavista itself to calculate for this exact address (test env). */
-function dpd_relay_check_address($order_id) {
-    if (!dpd_is_test()) { return array('status' => 'fail', 'detail' => 'Проверка через API разрешена только в тестовой среде.'); }
+/** Optional: ask Dostavista itself to calculate for this exact address.
+ * В боевой среде требует явного разрешения; выполняется только calculate-order,
+ * заявка не создаётся и курьер не вызывается.
+ */
+function dpd_relay_check_address($order_id, $allow_production = false) {
+    if (!dpd_is_test() && $allow_production !== true) { return array('status' => 'fail', 'detail' => 'Боевой расчёт не разрешён. Поставь галочку «Разрешить расчёт в боевой среде».'); }
     $order = wc_get_order((int) $order_id);
     if (!$order) { return array('status' => 'fail', 'detail' => 'Заказ не найден.'); }
     $origin = dpd_origin();

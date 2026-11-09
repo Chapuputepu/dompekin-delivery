@@ -42,7 +42,7 @@ function dpd_admin_relay() {
     if (!current_user_can('manage_woocommerce')) { wp_die('Недостаточно прав.'); }
     check_admin_referer('dpd_diag');
     $order_id = absint($_POST['order_id'] ?? 0);
-    $relay = dpd_relay_check_address($order_id);
+    $relay = dpd_relay_check_address($order_id, (isset($_POST['allow_production']) && $_POST['allow_production'] === 'yes'));
     set_transient(dpd_diag_key(), array('order_id' => $order_id, 'steps' => dpd_diagnose($order_id), 'relay' => $relay), 600);
     wp_safe_redirect(add_query_arg(array('page' => 'dompekin-delivery', 'diag' => '1'), admin_url('admin.php')));
     exit;
@@ -128,9 +128,10 @@ function dpd_render_diagnostics() {
     echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" style="display:inline-block">';
     wp_nonce_field('dpd_diag');
     echo '<input type="hidden" name="action" value="dpd_relay" /><input type="hidden" name="order_id" value="' . esc_attr((int) $data['order_id']) . '" />';
-    submit_button('Проверить адрес в Достависте (только тест)', 'secondary', 'submit', false);
+    submit_button('Проверить адрес в Достависте', 'secondary', 'submit', false);
+    echo '<label style="display:block;margin-top:6px"><input type="checkbox" name="allow_production" value="yes" /> Разрешить расчёт в боевой среде (заявка НЕ создаётся)</label>';
     echo '</form>';
-    echo '<p class="description">Проверка в Достависте выполняет только расчёт (calculate-order) в тестовой среде. Заявка не создаётся.</p>';
+    echo '<p class="description">Выполняется только calculate-order. В тестовой среде нужен тестовый токен, в боевой — боевой. Заявка не создаётся.</p>';
     echo '<h3>Ручная команда API</h3>';
     echo '<p>Создаёт заявку в обход официального модуля. Среда: <strong>' . esc_html(dpd_is_test() ? 'тестовая' : 'БОЕВАЯ') . '</strong>. Повторная заявка по тому же заказу не создаётся.</p>';
     echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
