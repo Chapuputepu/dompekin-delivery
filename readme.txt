@@ -1,4 +1,4 @@
-﻿=== Dompekin Delivery ===
+=== Dompekin Delivery ===
 Requires at least: 6.0
 Requires PHP: 7.4
 Stable tag: 0.1.1
