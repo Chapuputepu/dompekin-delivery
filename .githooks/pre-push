@@ -1,0 +1,39 @@
+#!/bin/sh
+# Блокирует push, если PHP-файлы сломаны, содержат BOM или секреты.
+# Устанавливается локально (.git/hooks/pre-push), не попадает в репозиторий.
+
+fail=0
+
+# 1. BOM в начале файла — ломает WordPress (вывод до заголовков).
+for f in $(git diff --cached --name-only --diff-filter=ACM; git ls-files); do
+  case "$f" in
+    *.php|*.txt|*.md) ;;
+    *) continue ;;
+  esac
+  [ -f "$f" ] || continue
+  head=$(head -c 3 "$f" | od -An -tx1 | tr -d ' \n')
+  if [ "$head" = "efbbbf" ]; then
+    echo "BLOCKED: BOM at start of $f" >&2
+    fail=1
+  fi
+done
+
+# 2. Грубая проверка подозрительных секретов в PHP.
+if git grep -nE "(token|secret|api[_-]?key)[\"']?\s*[:=]\s*[\"'][A-Za-z0-9_-]{32,}[\"']" -- '*.php' >/dev/null 2>&1; then
+  echo "BLOCKED: похоже на захардкоженный токен/секрет в PHP" >&2
+  git grep -nE "(token|secret|api[_-]?key)[\"']?\s*[:=]\s*[\"'][A-Za-z0-9_-]{32,}[\"']" -- '*.php' >&2
+  fail=1
+fi
+
+# 3. Синтаксис PHP, если php доступен.
+if command -v php >/dev/null 2>&1; then
+  for f in $(git ls-files '*.php'); do
+    php -l "$f" >/dev/null 2>&1 || { echo "BLOCKED: PHP syntax error in $f" >&2; fail=1; }
+  done
+fi
+
+if [ "$fail" -ne 0 ]; then
+  echo "Push отменён: исправь проблемы выше." >&2
+  exit 1
+fi
+exit 0
