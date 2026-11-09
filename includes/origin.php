@@ -33,7 +33,7 @@ function dpd_distance_km($address) {
     $origin = dpd_restaurant_point();
     if (is_wp_error($origin)) { return $origin; }
     // dpd_geocode_report повторяет запрос после сброса отрицательного кэша.
-    $report = dpd_geocode_report($address);
+    $report = function_exists('dpd_geocode_report') ? dpd_geocode_report($address) : dpd_geocode_once($address);
     if ($report['state'] === 'wp_error') { return new WP_Error('dpd_geo_error', 'Геокодер вернул ошибку: ' . $report['code'] . '. Адрес клиента ни при чём.'); }
     if ($report['state'] === 'missing_function') { return new WP_Error('dpd_geo_missing', 'Геокодер темы недоступен.'); }
     if ($report['state'] !== 'found') { return new WP_Error('dpd_geo_notfound', 'Геокодер не подтвердил адрес доставки. Проверьте адрес: ' . $address); }

@@ -24,46 +24,6 @@ function dpd_geocoder_key_present() {
 }
 
 /** Runs the same geocoder used by the site; обходит отрицательный кэш повторной попыткой. */
-function dpd_geocode_report($address) {
-    if (!function_exists('dp_zone_geocode')) { return array('state' => 'missing_function'); }
-    $first = dpd_geocode_once($address);
-    if ($first['state'] === 'found') { $first['attempts'] = 1; return $first; }
-    // Отрицательный результат мог быть закэширован на 30 дней — пробуем свежий запрос.
-    $cleared = dpd_clear_address_cache($address);
-    $second = dpd_geocode_once($address);
-    $second['attempts'] = 2;
-    $second['cache_cleared'] = (bool) $cleared;
-    return $second;
-}
-
-function dpd_geocode_once($address) {
-    $result = dp_zone_geocode($address);
-    if (is_wp_error($result)) { return array('state' => 'wp_error', 'code' => $result->get_error_code(), 'message' => $result->get_error_message()); }
-    if (!is_array($result)) { return array('state' => 'bad_shape'); }
-    if (empty($result['found'])) { return array('state' => 'not_found', 'raw_keys' => array_keys($result)); }
-    return array(
-        'state' => 'found',
-        'lat' => isset($result['lat']) ? (float) $result['lat'] : null,
-        'lon' => isset($result['lon']) ? (float) $result['lon'] : null,
-        'precision' => isset($result['precision']) && is_string($result['precision']) ? $result['precision'] : null,
-    );
-}
-
-function dpd_cached_geocode_state($address) {
-    if (!function_exists('get_transient')) { return null; }
-    $key = 'dp_geo_' . md5(function_exists('mb_strtolower') ? mb_strtolower($address) : strtolower($address));
-    $value = get_transient($key);
-    if ($value === false) { return array('present' => false); }
-    $found = is_array($value) ? !empty($value['found']) : null;
-    return array('present' => true, 'found' => $found, 'key' => $key);
-}
-
-function dpd_clear_address_cache($address) {
-    $key = 'dp_geo_' . md5(function_exists('mb_strtolower') ? mb_strtolower($address) : strtolower($address));
-    return delete_transient($key);
-}
-
-/** Full ordered diagnosis. Each step is independent and reports a concrete reason. */
 function dpd_diagnose($order_id) {
     $steps = array();
     $order = wc_get_order((int) $order_id);
@@ -160,6 +120,17 @@ function dpd_check_geocoder_now() {
     return $steps;
 }
 
+/** Обрезает ответ API и убирает почту и телефоны, чтобы не тащить персональные данные в админку и логи. */
+function dpd_safe_snippet($text) {
+    $text = is_string($text) ? $text : '';
+    $text = preg_replace('/[\w.+-]+@[\w-]+\.[\w.]+/u', '[email]', $text);
+    $text = preg_replace('/\+?\d[\d\s\-()]{9,}/u', '[phone]', $text);
+    $text = preg_replace('/\s+/u', ' ', $text);
+    $text = trim($text);
+    if ($text === '') { return 'пусто'; }
+    return (function_exists('mb_substr') ? mb_substr($text, 0, 300, 'UTF-8') : substr($text, 0, 300));
+}
+
 /** Optional: ask Dostavista itself to calculate for this exact address (test env). */
 function dpd_relay_check_address($order_id) {
     if (!dpd_is_test()) { return array('status' => 'fail', 'detail' => 'Проверка через API разрешена только в тестовой среде.'); }
@@ -172,9 +143,23 @@ function dpd_relay_check_address($order_id) {
     if (trim((string) $src['phone']) === '') { return array('status' => 'fail', 'detail' => 'В заказе не заполнен телефон получателя — Достависта его требует.'); }
     $payload = dpd_build_payload($order, $origin, 6);
     if (is_wp_error($payload)) { return array('status' => 'fail', 'detail' => $payload->get_error_message()); }
-    $data = dpd_json(dpd_api_request('calculate-order', $payload));
-    if (!is_array($data)) { return array('status' => 'fail', 'detail' => 'API не ответил корректно (ключ, сеть или лимит).'); }
-    if (($data['is_successful'] ?? null) !== true) { return array('status' => 'fail', 'detail' => 'Достависта НЕ приняла адрес при расчёте.'); }
+    $response = dpd_api_request('calculate-order', $payload);
+    if (is_wp_error($response)) { return array('status' => 'fail', 'detail' => 'Сеть или ключ: ' . $response->get_error_message()); }
+    $status = is_array($response) ? (int) ($response['status'] ?? 0) : 0;
+    $raw = is_array($response) ? (string) ($response['body'] ?? '') : '';
+    $data = json_decode($raw, true);
+    if (!is_array($data)) {
+        return array('status' => 'fail', 'detail' => 'HTTP ' . $status . '. Ответ не JSON: ' . dpd_safe_snippet($raw));
+    }
+    if (($data['is_successful'] ?? null) !== true) {
+        $details = array();
+        if (isset($data['errors']) && is_array($data['errors'])) {
+            foreach (array_slice($data['errors'], 0, 5) as $err) {
+                if (is_array($err)) { $details[] = trim(((string) ($err['field'] ?? '')) . ' ' . ((string) ($err['code'] ?? '')) . ' ' . ((string) ($err['message'] ?? ''))); }
+            }
+        }
+        return array('status' => 'fail', 'detail' => 'HTTP ' . $status . '. Достависта отклонила расчёт: ' . (($details ? implode('; ', $details) : dpd_safe_snippet($raw))));
+    }
     $warnings = is_array($data['warnings'] ?? null) ? $data['warnings'] : array();
     $amount = $data['order']['payment_amount'] ?? '—';
     return array('status' => $warnings ? 'warn' : 'ok', 'detail' => 'Достависта приняла адрес. Расчёт: ' . $amount . ' ₽.' . ($warnings ? ' Предупреждения: ' . wp_json_encode($warnings) : ''));

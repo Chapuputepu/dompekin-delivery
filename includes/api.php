@@ -57,15 +57,10 @@ function dpd_amount_minor($amount) {
 
 /** Builds the documented minimal standard order. */
 function dpd_build_payload($order, $origin, $vehicle_id) {
-    $parts = $order->get_formatted_shipping_address();
-    if (!is_string($parts) || trim($parts) === '') {
-        $parts = trim($order->get_shipping_address_1() . ' ' . $order->get_shipping_address_2() . ', ' . $order->get_shipping_city());
-    }
-    if (trim($parts, " ,") === '') {
-        $parts = $order->get_formatted_billing_address();
-    }
-    $address = trim(preg_replace('/\s+/u', ' ', wp_strip_all_tags((string) $parts)), " ,");
+    $normalized = dpd_order_address($order);
+    $address = $normalized['text'];
     $phone = trim((string) $order->get_billing_phone());
+    if ($phone === '' && method_exists($order, 'get_shipping_phone')) { $phone = trim((string) $order->get_shipping_phone()); }
     if ($address === '' || $phone === '') { return new WP_Error('dpd_missing', 'В заказе нет адреса или телефона получателя.'); }
     if (strlen($address) > 1000 || strlen($phone) > 80) { return new WP_Error('dpd_missing', 'Адрес или телефон слишком длинные.'); }
     $matter = 'Заказ #' . $order->get_order_number();
