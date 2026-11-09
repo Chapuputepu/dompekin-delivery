@@ -17,8 +17,20 @@ function dpd_order_ready($order) {
     if (!$order->is_paid()) { return new WP_Error('dpd_unpaid', 'Оплата не подтверждена.'); }
     if ($order->get_meta('_dp_stage') !== 'cooking') { return new WP_Error('dpd_notaccepted', 'Заказ ещё не принят рестораном.'); }
     if ($order->get_meta('_dpd_carrier_id')) { return new WP_Error('dpd_exists', 'Доставка уже создана.'); }
-    if (!$order->needs_shipping_address() && $order->get_shipping_method() === '') { return new WP_Error('dpd_nodelivery', 'Заказ не является доставкой.'); }
+    if (!dpd_is_delivery_order($order)) { return new WP_Error('dpd_nodelivery', 'Заказ оформлен как самовывоз, курьер не вызывается.'); }
     return true;
+}
+
+/** Доставка ли это. Самовывоз должен отсекаться всегда. */
+function dpd_is_delivery_order($order) {
+    if (!is_object($order) || !method_exists($order, 'get_shipping_methods')) { return false; }
+    $items = $order->get_shipping_methods();
+    if (!is_array($items) || count($items) === 0) { return false; }
+    foreach ($items as $item) {
+        $id = method_exists($item, 'get_method_id') ? (string) $item->get_method_id() : '';
+        if ($id === 'local_pickup') { return false; }
+    }
+    return (bool) $order->needs_shipping_address() || count($items) > 0;
 }
 
 function dpd_run_dispatch($order_id) {
