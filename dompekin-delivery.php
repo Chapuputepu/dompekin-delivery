@@ -1,42 +1,49 @@
 <?php
 /**
  * Plugin Name: Dompekin Delivery
- * Description: РЈРїСЂР°РІР»СЏРµРјС‹Р№ РІС‹Р·РѕРІ РєСѓСЂСЊРµСЂР° Р”РѕСЃС‚Р°РІРёСЃС‚С‹ РїРѕСЃР»Рµ РїСЂРёРЅСЏС‚РёСЏ РѕРїР»Р°С‡РµРЅРЅРѕРіРѕ Р·Р°РєР°Р·Р°.
- * Version: 0.1.3
+ * Description: Управляемый вызов курьера Достависты после принятия оплаченного заказа.
+ * Version: 0.2.0
  * Requires PHP: 7.4
- * Requires Plugins: woocommerce
+ * Author: Dompekin
  */
 if (!defined('ABSPATH')) { exit; }
 
-define('DPD_VERSION', '0.1.3');
+// Защита от двойной загрузки: если копия плагина уже загружена, вторая не объявляет функции повторно.
+if (defined('DPD_VERSION')) { return; }
+
+define('DPD_VERSION', '0.2.0');
 define('DPD_OPT', 'dpd_settings');
 define('DPD_DIR', plugin_dir_path(__FILE__));
 
-require_once DPD_DIR . 'includes/settings.php';
-require_once DPD_DIR . 'includes/origin.php';
-require_once DPD_DIR . 'includes/api.php';
-require_once DPD_DIR . 'includes/lock.php';
-require_once DPD_DIR . 'includes/dispatch.php';
-require_once DPD_DIR . 'includes/diagnostics.php';
-require_once DPD_DIR . 'includes/callback.php';
-require_once DPD_DIR . 'includes/admin.php';
+$dpd_includes = array('settings', 'origin', 'api', 'lock', 'dispatch', 'callback', 'admin', 'diagnostics');
+foreach ($dpd_includes as $dpd_include) {
+    $dpd_path = DPD_DIR . 'includes/' . $dpd_include . '.php';
+    if (!is_readable($dpd_path)) {
+        if (function_exists('error_log')) { error_log('Dompekin Delivery: отсутствует ' . $dpd_path); }
+        return;
+    }
+    require_once $dpd_path;
+}
+unset($dpd_includes, $dpd_include, $dpd_path);
 
-register_activation_hook(__FILE__, function () {
+register_activation_hook(__FILE__, 'dpd_activate');
+
+function dpd_activate() {
     if (!get_option(DPD_OPT)) {
-        // Safe defaults: disabled, test environment, no token.
         add_option(DPD_OPT, dpd_default_settings(), '', 'no');
     }
-});
+}
 
-add_action('plugins_loaded', function () {
+/** Ничего не выполняется до готовности WordPress и WooCommerce. */
+function dpd_boot() {
     if (!class_exists('WooCommerce')) { return; }
-    dpd_register_admin();
-    dpd_register_callback();
-    // The theme marks acceptance with _dp_stage=cooking. Hook only after the meta is saved.
+    if (is_admin()) { dpd_register_admin(); }
     add_action('added_post_meta', 'dpd_on_stage_meta', 10, 4);
     add_action('updated_post_meta', 'dpd_on_stage_meta', 10, 4);
     add_action('dpd_dispatch_order', 'dpd_run_dispatch', 10, 1);
+}
+add_action('init', 'dpd_boot', 20);
+
+add_action('rest_api_init', function () {
+    if (class_exists('WooCommerce')) { dpd_register_callback(); }
 });
-
-
-
