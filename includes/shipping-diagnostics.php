@@ -188,4 +188,14 @@ function dpd_render_shipping_check() {
     global $wpdb;
     $names = $wpdb->get_col("SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE 'dp\\_%' ORDER BY option_name LIMIT 40");
     echo '<p><strong>Опции темы dp_*:</strong> ' . esc_html($names ? implode(', ', $names) : 'не найдены') . '</p>';
+
+    $setup = function_exists('dpd_zone_setup_state') ? dpd_zone_setup_state() : array();
+    echo '<h3>Самовосстановление зоны</h3><p>';
+    if (empty($setup['time'])) {
+        echo 'Проверок ещё не было: откройте любую страницу админки WooCommerce, плагин проверит зону сам.';
+    } else {
+        echo 'Последняя проверка: ' . esc_html(date_i18n('d.m.Y H:i', (int) $setup['time'])) . ' (зона «' . esc_html((string) ($setup['zone'] ?? '')) . '»). ';
+        echo empty($setup['actions']) ? 'Всё на месте, добавлять нечего.' : 'Исправлено: ' . esc_html(implode(', ', (array) $setup['actions'])) . '.';
+    }
+    echo '</p>';
 }
