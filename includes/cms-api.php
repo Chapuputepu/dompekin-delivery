@@ -147,6 +147,9 @@ function dpd_build_cms_payload($order, $origin, $vehicle_id) {
         'total_weight_kg' => $weight_kg,
         'insurance_amount' => 0,
         'vehicle_type_id' => (int) $vehicle_id,
+        // Оплата с баланса Достависты. Без этого поля API может выбрать наличные,
+        // и курьер потребует деньги с клиента, который уже оплатил заказ онлайн.
+        'payment_method' => 'non_cash',
         'points' => array(
             array(
                 'point_type' => 'plain',
