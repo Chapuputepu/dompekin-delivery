@@ -24,7 +24,7 @@ function dpd_api_request($path, $payload = null, $method = 'POST') {
         'reject_unsafe_urls' => true,
         'sslverify' => true,
         'limit_response_size' => 200001,
-        'headers' => array('X-DV-Auth-Token' => $token, 'Content-Type' => 'application/json'),
+        'headers' => array('X-DV-Auth-Token' => $token, 'Content-Type' => 'application/json', 'X-DPD-Plugin' => 'dompekin-delivery'),
     );
     if ($payload !== null) {
         $json = wp_json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
