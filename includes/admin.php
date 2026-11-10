@@ -169,6 +169,7 @@ function dpd_admin_save() {
     $next['restaurant_phone'] = mb_substr(sanitize_text_field((string) ($post['restaurant_phone'] ?? '')), 0, 80);
     $walk = (float) ($post['walk_max_km'] ?? 2);
     $next['walk_max_km'] = ($walk > 0 && $walk <= 20) ? number_format($walk, 2, '.', '') : '2.00';
+    $next['prep_minutes'] = (string) max(0, min(240, (int) ($post['prep_minutes'] ?? 60)));
     $next['pickup_enabled'] = !empty($post['pickup_enabled']);
     $next['dispatch_mode'] = (($post['dispatch_mode'] ?? 'external') === 'own') ? 'own' : 'external';
     if (($post['clear_tokens'] ?? '') === '1') { $next['token'] = ''; $next['token_test'] = ''; }
@@ -221,6 +222,7 @@ function dpd_admin_page() {
     echo '<tr><th>Адрес ресторана</th><td><input type="text" name="restaurant_address" class="large-text" value="' . esc_attr($s['restaurant_address']) . '" /></td></tr>';
     echo '<tr><th>Телефон ресторана</th><td><input type="text" name="restaurant_phone" class="regular-text" value="' . esc_attr($s['restaurant_phone']) . '" /></td></tr>';
     echo '<tr><th>Пеший курьер до, км</th><td><input type="number" step="0.1" min="0.1" max="20" name="walk_max_km" value="' . esc_attr($s['walk_max_km']) . '" /></td></tr>';
+    echo '<tr><th>Готовим заказ, мин</th><td><input type="number" min="0" max="240" name="prep_minutes" value="' . esc_attr($s['prep_minutes']) . '" /><p class="description">От этого считается окно забора: курьер приезжает не раньше, чем через это время.</p></td></tr>';
     echo '<tr><th>Самовывоз</th><td><label><input type="checkbox" name="pickup_enabled" value="1" ' . checked(dpd_pickup_enabled(), true, false) . ' /> Показывать самовывоз на чекауте</label><p class="description">По умолчанию выключен: сайт работает только на доставку. При включении плагин сам добавит самовывоз в зону, при выключении — удалит.</p></td></tr>';
     echo '<tr><th>Секрет уведомлений</th><td><input type="password" name="callback_secret" class="regular-text" autocomplete="off" placeholder="' . ($s['callback_secret'] !== '' ? 'сохранён' : 'не задан') . '" /><p class="description">Адрес уведомлений: ' . esc_html(rest_url('dpd/v1/callback')) . '</p></td></tr>';
     echo '<tr><th>Очистить токены</th><td><label><input type="checkbox" name="clear_tokens" value="1" /> Удалить сохранённые токены</label></td></tr>';

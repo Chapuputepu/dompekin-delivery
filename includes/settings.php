@@ -12,6 +12,7 @@ function dpd_default_settings() {
         'restaurant_phone' => '',
         'walk_max_km' => '2.0',
         'delay_minutes' => '0',
+        'prep_minutes' => '60',
         'pickup_enabled' => false,
         'dispatch_mode' => 'own',
     );
@@ -47,6 +48,12 @@ function dpd_walk_max_km() {
 /** Самовывоз выключен по решению владельца: сайт работает только на доставку. */
 function dpd_pickup_enabled() {
     return (bool) dpd_settings()['pickup_enabled'];
+}
+
+/** Сколько минут кухня готовит заказ: от этого считается окно забора курьером. */
+function dpd_prep_minutes() {
+    $value = (int) dpd_settings()['prep_minutes'];
+    return ($value >= 0 && $value <= 240) ? $value : 60;
 }
 
 /**

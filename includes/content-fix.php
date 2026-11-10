@@ -20,6 +20,8 @@ function dpd_content_fix_pairs() {
             => 'Стоимость доставки рассчитывается по вашему адресу при оформлении заказа и показывается до оплаты. Доставку выполняет сервис «Достависта».',
         'Жёлтым выделена зона курьерской доставки. Если ваш адрес вне зоны, доступен самовывоз.'
             => 'Жёлтым выделена зона курьерской доставки. Если ваш адрес вне зоны, оформить заказ на сайте нельзя — позвоните нам.',
+        'При заказе от 4000 ₽ доставка бесплатная.'
+            => 'При заказе от 10 000 ₽ доставка бесплатная.',
     );
 }
 
@@ -48,7 +50,7 @@ function dpd_content_state() {
 
 add_action('wp_loaded', 'dpd_maybe_fix_delivery_page', 26);
 function dpd_maybe_fix_delivery_page() {
-    if (get_option('dpd_content_fix_v1')) { return; }
+    if (get_option('dpd_content_fix_v3')) { return; }
     if (get_transient('dpd_content_fix_lock')) { return; }
     set_transient('dpd_content_fix_lock', 1, 10 * MINUTE_IN_SECONDS);
 
@@ -85,7 +87,7 @@ function dpd_maybe_fix_delivery_page() {
         return;
     }
 
-    update_option('dpd_content_fix_v1', 1, false);
+    update_option('dpd_content_fix_v3', 1, false);
     update_option('dpd_content_fix_state', array(
         'time' => time(),
         'result' => 'заменено фрагментов: ' . $replaced . ($missing ? '; не найдено: ' . implode(' | ', $missing) : ''),

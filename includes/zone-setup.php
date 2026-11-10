@@ -13,7 +13,7 @@ function dpd_zone_defaults() {
         'pickup_address' => 'Новосибирск, Мичурина 12',
         'courier_title' => 'Доставка курьером',
         'courier_cost' => '250',
-        'courier_free_from' => '4000',
+        'courier_free_from' => '10000',
         'courier_city' => 'Новосибирск',
     );
 }
@@ -107,8 +107,28 @@ function dpd_remove_foreign_courier($zone) {
     return $removed;
 }
 
-add_action('admin_init', 'dpd_clean_foreign_courier', 11);
-function dpd_clean_foreign_courier() {
+/** Одноразовое обновление порога бесплатной доставки 4000 -> 10000 в уже созданном методе. */
+add_action('admin_init', 'dpd_migrate_free_from', 12);
+function dpd_migrate_free_from() {
+    if (get_option('dpd_free_from_migrated_v1')) { return; }
+    if (!class_exists('WC_Shipping_Zones')) { return; }
+    $zone = dpd_target_zone();
+    if (!$zone) { return; }
+
+    foreach ($zone->get_shipping_methods(false) as $method) {
+        if ($method->id !== 'dpd_courier') { continue; }
+        $key = 'woocommerce_dpd_courier_' . (int) $method->instance_id . '_settings';
+        $stored = get_option($key, array());
+        if (is_array($stored) && isset($stored['free_from']) && (float) $stored['free_from'] === 4000.0) {
+            $stored['free_from'] = '10000';
+            update_option($key, $stored, false);
+        }
+        update_option('dpd_free_from_migrated_v1', 1, false);
+        return;
+    }
+}
+
+add_action('admin_init', 'dpd_clean_foreign_courier', 11);function dpd_clean_foreign_courier() {
     if (!class_exists('WC_Shipping_Zones')) { return; }
     if (function_exists('dpd_dispatch_is_external') && dpd_dispatch_is_external()) { return; }
     $zone = dpd_target_zone();

@@ -50,7 +50,7 @@ function dpd_define_courier_method() {
                 'free_from' => array(
                     'title' => 'Бесплатно от, ₽',
                     'type' => 'number',
-                    'default' => '4000',
+                    'default' => '10000',
                 ),
                 'city' => array(
                     'title' => 'Город доставки',
@@ -111,7 +111,7 @@ function dpd_define_courier_method() {
             if (!$this->dpd_city_allowed($city, $postcode)) { return; }
 
             $fallback = (float) $this->get_option('cost', 250);
-            $free_from = (float) $this->get_option('free_from', 4000);
+            $free_from = (float) $this->get_option('free_from', 10000);
             $subtotal = $this->dpd_cart_subtotal($package);
 
             $mode = (string) $this->get_option('price_mode', 'bands');

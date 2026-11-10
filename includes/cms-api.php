@@ -137,10 +137,11 @@ function dpd_build_cms_payload($order, $origin, $vehicle_id) {
     $weight_kg = max(1, (int) ceil($weight));
 
     $zone = function_exists('wp_timezone') ? wp_timezone() : null;
+    $prep = function_exists('dpd_prep_minutes') ? dpd_prep_minutes() : 60;
     $start = new DateTime('now', $zone);
-    $start->modify('+15 minutes');
+    $start->modify('+' . $prep . ' minutes');
     $finish = new DateTime('now', $zone);
-    $finish->modify('+45 minutes');
+    $finish->modify('+' . ($prep + 30) . ' minutes');
 
     return array(
         'matter' => mb_substr('Заказ #' . $order->get_order_number(), 0, 400),
