@@ -160,6 +160,7 @@ function dpd_admin_save() {
     $walk = (float) ($post['walk_max_km'] ?? 2);
     $next['walk_max_km'] = ($walk > 0 && $walk <= 20) ? number_format($walk, 2, '.', '') : '2.00';
     $next['pickup_enabled'] = !empty($post['pickup_enabled']);
+    $next['dispatch_mode'] = (($post['dispatch_mode'] ?? 'external') === 'own') ? 'own' : 'external';
     if (($post['clear_tokens'] ?? '') === '1') { $next['token'] = ''; $next['token_test'] = ''; }
     update_option(DPD_OPT, $next, 'no');
     wp_safe_redirect(add_query_arg(array('page' => 'dompekin-delivery', 'saved' => '1'), admin_url('admin.php')));
@@ -173,7 +174,7 @@ function dpd_admin_page() {
     $has_token = dpd_active_token() !== '';
     echo '<div class="wrap"><h1>Dompekin Delivery</h1>';
     if (isset($_GET['saved'])) { echo '<div class="notice notice-success"><p>Настройки сохранены.</p></div>'; }
-    echo '<p><strong>Среда: ' . esc_html($env) . '</strong> · Автовызов: ' . (dpd_enabled() ? '<strong>включён</strong>' : 'выключен') . ' · Токен: ' . ($has_token ? 'задан' : 'не задан') . '</p>';
+    echo '<p><strong>Среда: ' . esc_html($env) . '</strong> · Заявки создаёт: ' . (dpd_dispatch_is_external() ? 'официальный плагин Достависты' : 'наш плагин') . ' · Автовызов: ' . (dpd_enabled() ? '<strong>включён</strong>' : 'выключен') . ' · Токен: ' . ($has_token ? 'задан' : 'не задан') . '</p>';
     echo '<p>Токен вводится только здесь и не отображается. Он не передаётся в чат и не пишется в отчёты. Ключи хранятся в базе сайта в открытом виде — доступ к базе должен быть ограничен.</p>';
     echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
     wp_nonce_field('dpd_save');
@@ -181,6 +182,7 @@ function dpd_admin_page() {
     echo '<table class="form-table">';
     echo '<tr><th>Автовызов после принятия</th><td><label><input type="checkbox" name="enabled" value="1" ' . checked(dpd_enabled(), true, false) . ' /> Вызывать курьера автоматически после принятия оплаченного заказа</label></td></tr>';
     echo '<tr><th>Среда API</th><td><select name="environment"><option value="test" ' . selected($s['environment'], 'test', false) . '>Тестовая</option><option value="production" ' . selected($s['environment'], 'production', false) . '>Боевая</option></select><p class="description">Тестовая среда не создаёт реальных доставок.</p></td></tr>';
+    echo '<tr><th>Кто создаёт заявки</th><td><select name="dispatch_mode"><option value="external" ' . selected(dpd_dispatch_is_external(), true, false) . '>Официальный плагин Достависты</option><option value="own" ' . selected(dpd_dispatch_is_external(), false, false) . '>Наш плагин напрямую</option></select><p class="description">Одновременно может быть только один писатель. В режиме «официальный плагин» наш автовызов не планирует и не создаёт заявки — только проверяет и пишет журнал.</p></td></tr>';
     echo '<tr><th>Токен (тест)</th><td><input type="password" name="token_test" class="regular-text" autocomplete="off" placeholder="' . ($s['token_test'] !== '' ? 'сохранён' : 'не задан') . '" /></td></tr>';
     echo '<tr><th>Токен (боевой)</th><td><input type="password" name="token" class="regular-text" autocomplete="off" placeholder="' . ($s['token'] !== '' ? 'сохранён' : 'не задан') . '" /></td></tr>';
     echo '<tr><th>Адрес ресторана</th><td><input type="text" name="restaurant_address" class="large-text" value="' . esc_attr($s['restaurant_address']) . '" /></td></tr>';

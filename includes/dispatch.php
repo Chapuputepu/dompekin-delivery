@@ -3,6 +3,8 @@ if (!defined('ABSPATH')) { exit; }
 
 function dpd_on_stage_meta($meta_id, $object_id, $meta_key, $meta_value) {
     if ($meta_key !== '_dp_stage' || $meta_value !== 'cooking') { return; }
+    // Заявки создаёт официальный плагин: наш писатель выключен, чтобы не было дублей.
+    if (function_exists('dpd_dispatch_is_external') && dpd_dispatch_is_external()) { return; }
     if (!dpd_enabled()) { return; }
     if (!dpd_active_token()) { return; }
     if (get_post_meta($object_id, '_dpd_carrier_id', true)) { return; }
@@ -34,6 +36,8 @@ function dpd_is_delivery_order($order) {
 }
 
 function dpd_run_dispatch($order_id) {
+    // Даже если событие уже стояло в очереди — в режиме внешнего транспорта не создаём.
+    if (function_exists('dpd_dispatch_is_external') && dpd_dispatch_is_external()) { return; }
     $order_id = (int) $order_id;
     $order = wc_get_order($order_id);
     if (!$order) { return; }

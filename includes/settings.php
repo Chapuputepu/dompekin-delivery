@@ -13,6 +13,7 @@ function dpd_default_settings() {
         'walk_max_km' => '2.0',
         'delay_minutes' => '0',
         'pickup_enabled' => false,
+        'dispatch_mode' => 'external',
     );
 }
 
@@ -46,4 +47,12 @@ function dpd_walk_max_km() {
 /** Самовывоз выключен по решению владельца: сайт работает только на доставку. */
 function dpd_pickup_enabled() {
     return (bool) dpd_settings()['pickup_enabled'];
+}
+
+/**
+ * Кто создаёт заявки: external — официальный плагин Достависты (по умолчанию),
+ * own — наш прямой клиент. Два писателя одновременно запрещены: это дубли.
+ */
+function dpd_dispatch_is_external() {
+    return (string) dpd_settings()['dispatch_mode'] !== 'own';
 }
