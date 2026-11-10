@@ -13,7 +13,7 @@ function dpd_default_settings() {
         'walk_max_km' => '2.0',
         'delay_minutes' => '0',
         'pickup_enabled' => false,
-        'dispatch_mode' => 'external',
+        'dispatch_mode' => 'own',
     );
 }
 

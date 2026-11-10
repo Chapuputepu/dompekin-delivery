@@ -3,10 +3,14 @@ if (!defined('ABSPATH')) { exit; }
 
 function dpd_on_stage_meta($meta_id, $object_id, $meta_key, $meta_value) {
     if ($meta_key !== '_dp_stage' || $meta_value !== 'cooking') { return; }
-    // Заявки создаёт официальный плагин: наш писатель выключен, чтобы не было дублей.
+    // Заявки создаёт наш плагин. Официальный плагин автовызова не имеет — дублей нет.
     if (function_exists('dpd_dispatch_is_external') && dpd_dispatch_is_external()) { return; }
     if (!dpd_enabled()) { return; }
-    if (!dpd_active_token()) { return; }
+    if (function_exists('dpd_cms_token')) {
+        if (dpd_cms_token() === '') { return; }
+    } elseif (!dpd_active_token()) {
+        return;
+    }
     if (get_post_meta($object_id, '_dpd_carrier_id', true)) { return; }
     $args = array((int) $object_id);
     if (wp_next_scheduled('dpd_dispatch_order', $args)) { return; }
@@ -15,7 +19,8 @@ function dpd_on_stage_meta($meta_id, $object_id, $meta_key, $meta_value) {
 
 function dpd_order_ready($order) {
     if (!dpd_enabled()) { return new WP_Error('dpd_off', 'Плагин выключен.'); }
-    if (dpd_active_token() === '') { return new WP_Error('dpd_nokey', 'Не задан токен Достависты.'); }
+    $has_token = function_exists('dpd_cms_token') ? (dpd_cms_token() !== '') : (dpd_active_token() !== '');
+    if (!$has_token) { return new WP_Error('dpd_nokey', 'Нет токена Достависты. Для боевой среды войдите в визард официального плагина.'); }
     if (!$order->is_paid()) { return new WP_Error('dpd_unpaid', 'Оплата не подтверждена.'); }
     if ($order->get_meta('_dp_stage') !== 'cooking') { return new WP_Error('dpd_notaccepted', 'Заказ ещё не принят рестораном.'); }
     if ($order->get_meta('_dpd_carrier_id')) { return new WP_Error('dpd_exists', 'Доставка уже создана.'); }
@@ -61,16 +66,24 @@ function dpd_run_dispatch($order_id) {
     $distance = dpd_distance_km($address);
     if (is_wp_error($distance)) { dpd_finish_blocked($order, $token, $distance->get_error_message()); return; }
 
-    $payload = dpd_build_payload($order, $origin, dpd_vehicle_for($distance));
+    $payload = dpd_build_cms_payload($order, $origin, dpd_vehicle_for($distance));
     if (is_wp_error($payload)) { dpd_finish_blocked($order, $token, $payload->get_error_message()); return; }
 
-    $calc = dpd_json(dpd_api_request('calculate-order', $payload));
-    if (!is_array($calc) || ($calc['is_successful'] ?? null) !== true) { dpd_finish_blocked($order, $token, 'Достависта не подтвердила расчёт доставки.'); return; }
-    if (!isset($calc['warnings']) || !is_array($calc['warnings']) || $calc['warnings'] !== array()) { dpd_finish_blocked($order, $token, 'Достависта вернула предупреждения по заявке.'); return; }
-    $amount = dpd_amount_minor($calc['order']['payment_amount'] ?? null);
+    $calc = dpd_json(dpd_cms_request('calculate-order', $payload));
+    if (!is_array($calc) || ($calc['is_successful'] ?? null) !== true) {
+        dpd_finish_blocked($order, $token, 'Достависта не подтвердила расчёт доставки.');
+        return;
+    }
+
+    $warnings = (isset($calc['warnings']) && is_array($calc['warnings'])) ? $calc['warnings'] : array();
+    $amount = function_exists('dpd_parse_amount') ? dpd_parse_amount($calc['order']['payment_amount'] ?? null) : null;
+    if ($amount === null) {
+        $minor = dpd_amount_minor($calc['order']['payment_amount'] ?? null);
+        $amount = ($minor === null) ? null : ($minor / 100);
+    }
     if ($amount === null) { dpd_finish_blocked($order, $token, 'Некорректная сумма расчёта.'); return; }
 
-    $created = dpd_api_request('create-order', $payload);
+    $created = dpd_cms_request('create-order', $payload);
     $data = dpd_json($created);
     $carrier_id = (is_array($data) && ($data['is_successful'] ?? null) === true) ? ($data['order']['order_id'] ?? null) : null;
     if (!is_int($carrier_id) || $carrier_id <= 0) {
@@ -82,9 +95,14 @@ function dpd_run_dispatch($order_id) {
         $order->add_order_note('Dompekin Delivery: заявка создана, но состояние не сохранилось. Требуется сверка; не создавать повторно.');
         return;
     }
+
     $order->update_meta_data('_dpd_carrier_id', $carrier_id);
     $order->update_meta_data('_dpd_state', 'created');
-    $order->add_order_note(sprintf('Dompekin Delivery: заявка создана, ID %d. Среда: %s. Расчёт: %s ₽.', $carrier_id, dpd_is_test() ? 'тест' : 'боевая', number_format_i18n($amount / 100, 2)));
+    if ($warnings) { $order->update_meta_data('_dpd_warnings', wp_json_encode($warnings)); }
+
+    $note = sprintf('Dompekin Delivery: заявка создана, ID %d. Среда: %s. Расчёт: %s ₽.', $carrier_id, dpd_is_test() ? 'тест' : 'боевая', number_format_i18n($amount, 2));
+    if ($warnings) { $note .= ' Предупреждения Достависты: ' . wp_json_encode($warnings); }
+    $order->add_order_note($note);
     $order->save();
 }
 

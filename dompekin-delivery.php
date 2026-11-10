@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Dompekin Delivery
  * Description: Р Р€Р С—РЎР‚Р В°Р Р†Р В»РЎРЏР ВµР СРЎвЂ№Р в„– Р Р†РЎвЂ№Р В·Р С•Р Р† Р С”РЎС“РЎР‚РЎРЉР ВµРЎР‚Р В° Р вЂќР С•РЎРѓРЎвЂљР В°Р Р†Р С‘РЎРѓРЎвЂљРЎвЂ№ Р С—Р С•РЎРѓР В»Р Вµ Р С—РЎР‚Р С‘Р Р…РЎРЏРЎвЂљР С‘РЎРЏ Р С•Р С—Р В»Р В°РЎвЂЎР ВµР Р…Р Р…Р С•Р С–Р С• Р В·Р В°Р С”Р В°Р В·Р В°.
- * Version: 0.4.6
+ * Version: 0.5.0
  * Requires PHP: 7.4
  * Author: Dompekin
  */
@@ -11,11 +11,11 @@ if (!defined('ABSPATH')) { exit; }
 // Р вЂ”Р В°РЎвЂ°Р С‘РЎвЂљР В° Р С•РЎвЂљ Р Т‘Р Р†Р С•Р в„–Р Р…Р С•Р в„– Р В·Р В°Р С–РЎР‚РЎС“Р В·Р С”Р С‘: Р ВµРЎРѓР В»Р С‘ Р С”Р С•Р С—Р С‘РЎРЏ Р С—Р В»Р В°Р С–Р С‘Р Р…Р В° РЎС“Р В¶Р Вµ Р В·Р В°Р С–РЎР‚РЎС“Р В¶Р ВµР Р…Р В°, Р Р†РЎвЂљР С•РЎР‚Р В°РЎРЏ Р Р…Р Вµ Р С•Р В±РЎР‰РЎРЏР Р†Р В»РЎРЏР ВµРЎвЂљ РЎвЂћРЎС“Р Р…Р С”РЎвЂ Р С‘Р С‘ Р С—Р С•Р Р†РЎвЂљР С•РЎР‚Р Р…Р С•.
 if (defined('DPD_VERSION')) { return; }
 
-define('DPD_VERSION', '0.4.6');
+define('DPD_VERSION', '0.5.0');
 define('DPD_OPT', 'dpd_settings');
 define('DPD_DIR', plugin_dir_path(__FILE__));
 
-$dpd_includes = array('settings', 'address', 'geocode', 'origin', 'api', 'lock', 'dispatch', 'callback', 'admin', 'diagnostics', 'shipping-diagnostics', 'quote', 'shipping-method', 'zone-setup', 'legacy-guard', 'content-fix', 'http-observer');
+$dpd_includes = array('settings', 'address', 'geocode', 'origin', 'api', 'cms-api', 'lock', 'dispatch', 'callback', 'admin', 'diagnostics', 'shipping-diagnostics', 'quote', 'shipping-method', 'zone-setup', 'legacy-guard', 'content-fix', 'http-observer');
 foreach ($dpd_includes as $dpd_include) {
     $dpd_path = DPD_DIR . 'includes/' . $dpd_include . '.php';
     if (!is_readable($dpd_path)) {
