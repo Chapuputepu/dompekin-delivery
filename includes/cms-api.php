@@ -38,6 +38,39 @@ function dpd_dispatch_channel() {
     return '';
 }
 
+/** Доступен ли cms-module API с сервера сайта. Без токена: только проверка связи. */
+function dpd_ping_cms() {
+    $url = dpd_cms_base_url() . '/1.0/generate-captcha-token';
+    $args = array(
+        'method' => 'POST',
+        'timeout' => 10,
+        'redirection' => 0,
+        'sslverify' => true,
+        'limit_response_size' => 20000,
+        'headers' => array('Content-Type' => 'application/json', 'User-Agent' => 'WooCommerce Dostavista plugin'),
+        'body' => '{}',
+    );
+    try {
+        $response = wp_safe_remote_request($url, $args);
+    } catch (Throwable $e) {
+        return array('ok' => false, 'code' => 0, 'detail' => 'Исключение: ' . $e->getMessage());
+    }
+    if (is_wp_error($response)) {
+        return array('ok' => false, 'code' => 0, 'detail' => 'Нет связи: ' . $response->get_error_message());
+    }
+    $code = (int) wp_remote_retrieve_response_code($response);
+    $body = (string) wp_remote_retrieve_body($response);
+    $data = json_decode($body, true);
+    $ok = ($code === 200 && is_array($data) && !empty($data['captcha_token']));
+    return array(
+        'ok' => $ok,
+        'code' => $code,
+        'detail' => $ok ? 'API отвечает' : ('HTTP ' . $code),
+        'snippet' => function_exists('dpd_redact_text') ? dpd_redact_text(substr($body, 0, 300)) : substr($body, 0, 300),
+        'url' => $url,
+    );
+}
+
 function dpd_cms_request($path, $payload) {
     $allowed = array('calculate-order', 'create-order', 'orders');
     if (!in_array($path, $allowed, true)) { return new WP_Error('dpd_cms_path', 'Недопустимый метод API.'); }

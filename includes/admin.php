@@ -9,6 +9,16 @@ function dpd_register_admin() {
     add_action('admin_post_dpd_relay', 'dpd_admin_relay');
     add_action('admin_post_dpd_dispatch_now', 'dpd_admin_dispatch_now');
     add_action('admin_post_dpd_check_geo', 'dpd_admin_check_geo');
+    add_action('admin_post_dpd_api_ping', 'dpd_admin_api_ping');
+}
+
+function dpd_admin_api_ping() {
+    if (!current_user_can('manage_woocommerce')) { wp_die('Недостаточно прав.'); }
+    check_admin_referer('dpd_api_ping');
+    $result = function_exists('dpd_ping_cms') ? dpd_ping_cms() : array('ok' => false, 'detail' => 'Проверка недоступна.');
+    set_transient('dpd_api_ping_' . get_current_user_id(), $result, 300);
+    wp_safe_redirect(add_query_arg(array('page' => 'dompekin-delivery'), admin_url('admin.php')));
+    exit;
 }
 
 function dpd_diag_key() { return 'dpd_diag_' . get_current_user_id(); }
@@ -187,6 +197,18 @@ function dpd_admin_page() {
     }
     echo '<p><strong>Среда: ' . esc_html($env) . '</strong> · Заявки создаёт: ' . $channel_label . ' · Автовызов: ' . (dpd_enabled() ? '<strong>включён</strong>' : 'выключен') . ' · CMS-токен: ' . ($cms_token !== '' ? '<strong>есть</strong>' : 'нет') . ' · Токен business: ' . ($has_token ? 'задан' : 'не задан') . '</p>';
     echo '<p>Токен вводится только здесь и не отображается. Он не передаётся в чат и не пишется в отчёты. Ключи хранятся в базе сайта в открытом виде — доступ к базе должен быть ограничен.</p>';
+
+    echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" style="margin:8px 0 14px">';
+    wp_nonce_field('dpd_api_ping');
+    echo '<input type="hidden" name="action" value="dpd_api_ping" />';
+    submit_button('Проверить связь с API Достависты', 'secondary', 'submit', false);
+    echo '</form>';
+    $ping = get_transient('dpd_api_ping_' . get_current_user_id());
+    if (is_array($ping)) {
+        $color = !empty($ping['ok']) ? '#1a7f37' : '#b32d2e';
+        echo '<p style="color:' . esc_attr($color) . '"><strong>' . esc_html(!empty($ping['ok']) ? 'Связь есть' : 'Связи нет') . '</strong> — ' . esc_html((string) ($ping['detail'] ?? '')) . '</p>';
+        if (!empty($ping['snippet'])) { echo '<p><code style="word-break:break-all">' . esc_html((string) $ping['snippet']) . '</code></p>'; }
+    }
     echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
     wp_nonce_field('dpd_save');
     echo '<input type="hidden" name="action" value="dpd_save" />';
