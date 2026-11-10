@@ -58,6 +58,23 @@ function dpd_define_courier_method() {
                     'default' => 'Новосибирск',
                     'description' => 'Если адрес в другом городе, курьерский тариф не показывается. Пустое поле — без ограничения.',
                 ),
+                'price_mode' => array(
+                    'title' => 'Как считать цену',
+                    'type' => 'select',
+                    'default' => 'bands',
+                    'options' => array(
+                        'bands' => 'По расстоянию (таблица ниже)',
+                        'live' => 'Онлайн-расчёт Достависты (кэш 15 мин)',
+                        'fixed' => 'Фиксированная стоимость',
+                    ),
+                    'description' => 'При онлайн-расчёте любая ошибка API возвращает табличную цену, а не пустой тариф.',
+                ),
+                'bands' => array(
+                    'title' => 'Таблица: до_км | пеший | авто',
+                    'type' => 'textarea',
+                    'default' => "2|250|320\n5|320|450\n10|450|600\n20|600|800",
+                    'description' => 'Одна строка — одна полоса расстояния. Пример: 2|250|320 значит «до 2 км: пеший 250 ₽, авто 320 ₽». Цифры нужно сверить с Доставистой.',
+                ),
             );
         }
 
@@ -92,9 +109,53 @@ function dpd_define_courier_method() {
             $postcode = isset($package['destination']['postcode']) ? $package['destination']['postcode'] : '';
             if (!$this->dpd_city_allowed($city, $postcode)) { return; }
 
-            $cost = (float) $this->get_option('cost', 145);
+            $fallback = (float) $this->get_option('cost', 250);
             $free_from = (float) $this->get_option('free_from', 4000);
             $subtotal = $this->dpd_cart_subtotal($package);
+
+            $mode = (string) $this->get_option('price_mode', 'bands');
+            $cost = null;
+            $note = '';
+
+            if ($mode === 'fixed') {
+                $cost = $fallback;
+                $note = 'фиксированная';
+            } else {
+                $street = isset($package['destination']['address_1']) ? trim((string) $package['destination']['address_1']) : '';
+                if ($street === '' && isset($package['destination']['address'])) { $street = trim((string) $package['destination']['address']); }
+                $address = trim($city . ($street !== '' ? ', ' . $street : ''));
+
+                if ($address === '') {
+                    $note = 'адрес не заполнен — запасная цена';
+                } elseif (!function_exists('dpd_distance_km')) {
+                    $note = 'геокодер недоступен — запасная цена';
+                } else {
+                    $distance = dpd_distance_km($address);
+                    if (is_wp_error($distance)) {
+                        $note = 'расстояние не определено — запасная цена';
+                    } else {
+                        $vehicle = function_exists('dpd_vehicle_for') ? (int) dpd_vehicle_for($distance) : 7;
+                        $note = sprintf('%.2f км, транспорт %d', (float) $distance, $vehicle);
+
+                        if ($mode === 'live' && function_exists('dpd_quote_amount')) {
+                            $quote = dpd_quote_amount($address, $vehicle);
+                            if ($quote['state'] === 'ok') {
+                                $cost = (float) $quote['amount'];
+                                $note .= ', онлайн';
+                            } else {
+                                $note .= ', онлайн не удался';
+                            }
+                        }
+                        if ($cost === null && function_exists('dpd_price_from_bands')) {
+                            $bands = dpd_price_bands((string) $this->get_option('bands', ''));
+                            $cost = dpd_price_from_bands($bands, (float) $distance, $vehicle, $fallback);
+                            $note .= ', таблица';
+                        }
+                    }
+                }
+            }
+
+            if ($cost === null) { $cost = $fallback; }
             if ($free_from > 0 && $subtotal >= $free_from) { $cost = 0.0; }
 
             $this->add_rate(array(
@@ -102,7 +163,7 @@ function dpd_define_courier_method() {
                 'label' => $this->title,
                 'cost' => $cost,
                 'package' => $package,
-                'meta_data' => array('dpd_subtotal' => $subtotal),
+                'meta_data' => array('dpd_subtotal' => $subtotal, 'dpd_price_note' => $note),
             ));
         }
     }

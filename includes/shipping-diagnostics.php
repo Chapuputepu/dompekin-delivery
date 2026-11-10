@@ -62,6 +62,30 @@ function dpd_zone_locations($zone) {
     return $out;
 }
 
+/** Настройки первого экземпляра нашего метода доставки; по умолчанию — заводские. */
+function dpd_courier_instance_settings() {
+    $defaults = array(
+        'price_mode' => 'bands',
+        'bands' => "2|250|320\n5|320|450\n10|450|600\n20|600|800",
+        'cost' => 250,
+    );
+    if (!class_exists('WC_Shipping_Zones')) { return $defaults; }
+    foreach (WC_Shipping_Zones::get_zones() as $row) {
+        $zone = WC_Shipping_Zones::get_zone((int) $row['zone_id']);
+        if (!$zone) { continue; }
+        foreach ($zone->get_shipping_methods(false) as $method) {
+            if ($method->id !== 'dpd_courier') { continue; }
+            $stored = get_option('woocommerce_dpd_courier_' . (int) $method->instance_id . '_settings', array());
+            return array(
+                'price_mode' => isset($stored['price_mode']) ? (string) $stored['price_mode'] : $defaults['price_mode'],
+                'bands' => isset($stored['bands']) ? (string) $stored['bands'] : $defaults['bands'],
+                'cost' => isset($stored['cost']) ? (float) $stored['cost'] : (float) $defaults['cost'],
+            );
+        }
+    }
+    return $defaults;
+}
+
 /** Тарифы, которые WooCommerce реально отдаёт для тестового адреса. */
 function dpd_test_package_rates() {
     if (!function_exists('WC') || !WC()->shipping()) { return array('error' => 'WC()->shipping() недоступен.'); }
@@ -176,6 +200,38 @@ function dpd_render_shipping_check() {
         }
     }
     echo '<p><strong>Активные методы WooCommerce:</strong> ' . esc_html($methods_all ? implode(', ', $methods_all) : 'нет') . '</p>';
+
+    echo '<h3>Замер цены доставки</h3>';
+    echo '<p>Считает расстояние, выбирает транспорт, показывает онлайн-расчёт Достависты и цену по таблице.</p>';
+    $probe_addr = isset($_GET['dpd_addr']) ? sanitize_text_field(wp_unslash($_GET['dpd_addr'])) : '';
+    echo '<form method="get" action="" style="margin-bottom:10px">';
+    echo '<input type="hidden" name="page" value="dompekin-delivery" />';
+    echo '<input type="text" name="dpd_addr" class="regular-text" placeholder="Новосибирск, Сибирская 57" value="' . esc_attr($probe_addr) . '" /> ';
+    submit_button('Замерить', 'secondary', 'submit', false);
+    echo '</form>';
+
+    if ($probe_addr !== '' && function_exists('dpd_price_probe')) {
+        $inst = dpd_courier_instance_settings();
+        $probe = dpd_price_probe($probe_addr, $inst['bands'], $inst['price_mode'], $inst['cost']);
+        echo '<table class="widefat striped"><tbody>';
+        echo '<tr><td>Адрес</td><td>' . esc_html($probe['address']) . '</td></tr>';
+        if ($probe['distance'] === null) {
+            echo '<tr><td>Расстояние</td><td style="color:#b32d2e"><strong>' . esc_html($probe['distance_error']) . '</strong></td></tr>';
+        } else {
+            echo '<tr><td>Расстояние</td><td>' . esc_html(number_format_i18n((float) $probe['distance'], 2)) . ' км</td></tr>';
+            echo '<tr><td>Транспорт</td><td>' . esc_html($probe['vehicle'] === 6 ? 'пеший (6)' : 'авто (7)') . '</td></tr>';
+        }
+        if (is_array($probe['quote'])) {
+            if ($probe['quote']['state'] === 'ok') {
+                echo '<tr><td>Достависта</td><td><strong>' . esc_html(number_format_i18n((float) $probe['quote']['amount'], 2)) . ' ₽</strong></td></tr>';
+            } else {
+                echo '<tr><td>Достависта</td><td style="color:#b32d2e">' . esc_html($probe['quote']['message'] ?? 'не рассчитано') . '</td></tr>';
+            }
+        }
+        echo '<tr><td>По таблице</td><td>' . esc_html($probe['bands_price'] === null ? '—' : number_format_i18n((float) $probe['bands_price'], 2) . ' ₽') . '</td></tr>';
+        echo '<tr><td>Режим метода</td><td>' . esc_html($inst['price_mode']) . '</td></tr>';
+        echo '</tbody></table>';
+    }
 
     echo '<h3>Условия темы и магазина</h3><ul>';
     echo '<li>Часы работы (dp_cafe_is_open): ' . (function_exists('dp_cafe_is_open') ? (dp_cafe_is_open() ? '<strong style="color:#1a7f37">открыто</strong>' : '<strong style="color:#b32d2e">закрыто</strong>') : 'функция не найдена') . '</li>';
