@@ -93,6 +93,7 @@ function dpd_define_courier_method() {
                 if (preg_match($pattern, $city)) { return true; }
             }
             $postcode = trim((string) $postcode);
+            if ($city === '' && $postcode === '') { return true; }
             return (bool) preg_match('/^630\d{3}$/', $postcode);
         }
 
@@ -199,6 +200,7 @@ function dpd_is_local_destination($package) {
  */
 add_filter('woocommerce_package_rates', 'dpd_ensure_pickup_rate', 999, 2);
 function dpd_ensure_pickup_rate($rates, $package) {
+    if (function_exists('dpd_pickup_enabled') && !dpd_pickup_enabled()) { return $rates; }
     if (!empty($rates)) { return $rates; }
     if (!class_exists('WC_Shipping_Rate') || !class_exists('WC_Shipping_Zones')) { return $rates; }
     if (!dpd_is_local_destination($package)) { return $rates; }

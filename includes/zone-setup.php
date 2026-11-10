@@ -2,9 +2,9 @@
 if (!defined('ABSPATH')) { exit; }
 
 /**
- * Самовосстановление способов получения в зоне.
- * Причина: метод «Самовывоз» однажды исчез из зоны, и чекаут остался без вариантов.
- * Проверка идёт в админке не чаще раза в 6 часов, пишет только недостающие методы.
+ * Приведение зоны к рабочему состоянию.
+ * Самовывоз по умолчанию выключен: сайт работает только на доставку.
+ * Курьерский тариф добавляется, если его нет. Проверка не чаще раза в 6 часов.
  */
 
 function dpd_zone_defaults() {
@@ -82,6 +82,17 @@ function dpd_add_courier_to_zone($zone) {
     return true;
 }
 
+/** Удаляет самовывоз из зоны, если он выключен в настройках. Возвращает число удалённых. */
+function dpd_remove_pickup_from_zone($zone) {
+    $removed = 0;
+    foreach ($zone->get_shipping_methods(false) as $method) {
+        if ($method->id !== 'local_pickup') { continue; }
+        $zone->delete_shipping_method((int) $method->instance_id);
+        $removed++;
+    }
+    return $removed;
+}
+
 function dpd_maybe_provision_zone() {
     if (!class_exists('WC_Shipping_Zones')) { return; }
     if (get_transient('dpd_zone_setup_lock')) { return; }
@@ -91,12 +102,18 @@ function dpd_maybe_provision_zone() {
     if (!$zone) { return; }
 
     $actions = array();
+    $pickup_on = function_exists('dpd_pickup_enabled') ? dpd_pickup_enabled() : false;
     try {
-        if (!dpd_zone_has_method($zone, 'local_pickup') && dpd_add_pickup_to_zone($zone)) {
-            $actions[] = 'добавлен самовывоз';
-        }
         if (!dpd_zone_has_method($zone, 'dpd_courier') && dpd_add_courier_to_zone($zone)) {
             $actions[] = 'добавлен курьерский тариф';
+        }
+        if ($pickup_on) {
+            if (!dpd_zone_has_method($zone, 'local_pickup') && dpd_add_pickup_to_zone($zone)) {
+                $actions[] = 'добавлен самовывоз';
+            }
+        } else {
+            $removed = dpd_remove_pickup_from_zone($zone);
+            if ($removed > 0) { $actions[] = 'убран самовывоз (инстансов: ' . $removed . ')'; }
         }
     } catch (Throwable $e) {
         $actions[] = 'ошибка: ' . $e->getMessage();

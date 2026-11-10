@@ -12,6 +12,7 @@ function dpd_default_settings() {
         'restaurant_phone' => '',
         'walk_max_km' => '2.0',
         'delay_minutes' => '0',
+        'pickup_enabled' => false,
     );
 }
 
@@ -40,4 +41,9 @@ function dpd_enabled() {
 function dpd_walk_max_km() {
     $value = (float) dpd_settings()['walk_max_km'];
     return ($value > 0 && $value <= 20) ? $value : 2.0;
+}
+
+/** Самовывоз выключен по решению владельца: сайт работает только на доставку. */
+function dpd_pickup_enabled() {
+    return (bool) dpd_settings()['pickup_enabled'];
 }
