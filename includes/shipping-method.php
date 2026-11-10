@@ -117,6 +117,7 @@ function dpd_define_courier_method() {
             $mode = (string) $this->get_option('price_mode', 'live');
             $cost = null;
             $note = '';
+            $quote_error = '';
 
             if ($mode === 'fixed') {
                 $cost = $fallback;
@@ -164,7 +165,11 @@ function dpd_define_courier_method() {
                 'label' => $this->title,
                 'cost' => $cost,
                 'package' => $package,
-                'meta_data' => array('dpd_subtotal' => $subtotal, 'dpd_price_note' => $note),
+                'meta_data' => array(
+                    'dpd_subtotal' => $subtotal,
+                    'dpd_price_note' => $note,
+                    'dpd_error' => (function_exists('mb_substr') ? mb_substr($quote_error, 0, 200) : substr($quote_error, 0, 200)),
+                ),
             ));
         }
     }

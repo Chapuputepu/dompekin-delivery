@@ -113,7 +113,7 @@ function dpd_cms_request($path, $payload) {
 }
 
 /** Общее ядро заявки cms-module 1.0: используется и для расчёта на чекауте, и для вызова курьера. */
-function dpd_cms_payload_core($matter, $weight_kg, $vehicle_id, $origin, $dest_address, $dest_phone, $dest_name, $client_order_id = null) {
+function dpd_cms_payload_core($matter, $weight_kg, $vehicle_id, $origin, $dest_address, $dest_phone, $dest_name, $client_order_id = null, $with_payment = true) {
     $zone = function_exists('wp_timezone') ? wp_timezone() : null;
     $prep = function_exists('dpd_prep_minutes') ? dpd_prep_minutes() : 60;
     $start = new DateTime('now', $zone);
@@ -183,5 +183,5 @@ function dpd_cms_quote_payload($address, $origin, $vehicle_id, $phone) {
     if (function_exists('WC') && WC()->cart && method_exists(WC()->cart, 'get_cart_contents_weight')) {
         $weight = (float) WC()->cart->get_cart_contents_weight();
     }
-    return dpd_cms_payload_core('Расчёт доставки', $weight, $vehicle_id, $origin, $address, $phone, 'Получатель');
+    return dpd_cms_payload_core('Расчёт доставки', $weight, $vehicle_id, $origin, $address, $phone, 'Получатель', null, false);
 }
