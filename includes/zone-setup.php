@@ -19,6 +19,9 @@ function dpd_zone_defaults() {
 }
 
 add_action('admin_init', 'dpd_maybe_provision_zone');
+// Тот же контроль на обычной загрузке: после деплоя настройка применяется без визита в админку.
+// Частоту ограничивает transient-замок, пользовательского ввода здесь нет.
+add_action('wp_loaded', 'dpd_maybe_provision_zone', 20);
 
 function dpd_zone_setup_state() {
     $state = get_option('dpd_zone_setup_state', array());
@@ -80,7 +83,6 @@ function dpd_add_courier_to_zone($zone) {
 }
 
 function dpd_maybe_provision_zone() {
-    if (!current_user_can('manage_woocommerce')) { return; }
     if (!class_exists('WC_Shipping_Zones')) { return; }
     if (get_transient('dpd_zone_setup_lock')) { return; }
     set_transient('dpd_zone_setup_lock', 1, 6 * HOUR_IN_SECONDS);
