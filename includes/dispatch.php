@@ -6,11 +6,7 @@ function dpd_on_stage_meta($meta_id, $object_id, $meta_key, $meta_value) {
     // Заявки создаёт наш плагин. Официальный плагин автовызова не имеет — дублей нет.
     if (function_exists('dpd_dispatch_is_external') && dpd_dispatch_is_external()) { return; }
     if (!dpd_enabled()) { return; }
-    if (function_exists('dpd_cms_token')) {
-        if (dpd_cms_token() === '') { return; }
-    } elseif (!dpd_active_token()) {
-        return;
-    }
+    if (function_exists('dpd_dispatch_channel')) { if (dpd_dispatch_channel() === '') { return; } } elseif (!dpd_active_token()) { return; }
     if (get_post_meta($object_id, '_dpd_carrier_id', true)) { return; }
     $args = array((int) $object_id);
     if (wp_next_scheduled('dpd_dispatch_order', $args)) { return; }
@@ -19,7 +15,7 @@ function dpd_on_stage_meta($meta_id, $object_id, $meta_key, $meta_value) {
 
 function dpd_order_ready($order) {
     if (!dpd_enabled()) { return new WP_Error('dpd_off', 'Плагин выключен.'); }
-    $has_token = function_exists('dpd_cms_token') ? (dpd_cms_token() !== '') : (dpd_active_token() !== '');
+    $has_token = function_exists('dpd_dispatch_channel') ? (dpd_dispatch_channel() !== '') : (dpd_active_token() !== '');
     if (!$has_token) { return new WP_Error('dpd_nokey', 'Нет токена Достависты. Для боевой среды войдите в визард официального плагина.'); }
     if (!$order->is_paid()) { return new WP_Error('dpd_unpaid', 'Оплата не подтверждена.'); }
     if ($order->get_meta('_dp_stage') !== 'cooking') { return new WP_Error('dpd_notaccepted', 'Заказ ещё не принят рестораном.'); }
@@ -66,24 +62,32 @@ function dpd_run_dispatch($order_id) {
     $distance = dpd_distance_km($address);
     if (is_wp_error($distance)) { dpd_finish_blocked($order, $token, $distance->get_error_message()); return; }
 
-    $payload = dpd_build_cms_payload($order, $origin, dpd_vehicle_for($distance));
-    if (is_wp_error($payload)) { dpd_finish_blocked($order, $token, $payload->get_error_message()); return; }
+    $channel = dpd_dispatch_channel();
+    if ($channel === 'business') {
+        $payload = dpd_build_payload($order, $origin, dpd_vehicle_for($distance));
+        if (is_wp_error($payload)) { dpd_finish_blocked($order, $token, $payload->get_error_message()); return; }
+        $calc = dpd_json(dpd_api_request('calculate-order', $payload));
+    } else {
+        $payload = dpd_build_cms_payload($order, $origin, dpd_vehicle_for($distance));
+        if (is_wp_error($payload)) { dpd_finish_blocked($order, $token, $payload->get_error_message()); return; }
+        $calc = dpd_json(dpd_cms_request('calculate-order', $payload));
+    }
 
-    $calc = dpd_json(dpd_cms_request('calculate-order', $payload));
     if (!is_array($calc) || ($calc['is_successful'] ?? null) !== true) {
         dpd_finish_blocked($order, $token, 'Достависта не подтвердила расчёт доставки.');
         return;
     }
 
     $warnings = (isset($calc['warnings']) && is_array($calc['warnings'])) ? $calc['warnings'] : array();
-    $amount = function_exists('dpd_parse_amount') ? dpd_parse_amount($calc['order']['payment_amount'] ?? null) : null;
+    $raw_amount = $calc['order']['payment_amount'] ?? null;
+    $amount = function_exists('dpd_parse_amount') ? dpd_parse_amount($raw_amount) : null;
     if ($amount === null) {
-        $minor = dpd_amount_minor($calc['order']['payment_amount'] ?? null);
+        $minor = dpd_amount_minor($raw_amount);
         $amount = ($minor === null) ? null : ($minor / 100);
     }
     if ($amount === null) { dpd_finish_blocked($order, $token, 'Некорректная сумма расчёта.'); return; }
 
-    $created = dpd_cms_request('create-order', $payload);
+    $created = ($channel === 'business') ? dpd_api_request('create-order', $payload) : dpd_cms_request('create-order', $payload);
     $data = dpd_json($created);
     $carrier_id = (is_array($data) && ($data['is_successful'] ?? null) === true) ? ($data['order']['order_id'] ?? null) : null;
     if (!is_int($carrier_id) || $carrier_id <= 0) {

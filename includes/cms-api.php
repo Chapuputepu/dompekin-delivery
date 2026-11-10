@@ -31,6 +31,13 @@ function dpd_cms_token() {
     return $cached;
 }
 
+/** Какой контур использовать: введённый business-токен приоритетнее cms-токена плагина. */
+function dpd_dispatch_channel() {
+    if (dpd_active_token() !== '') { return 'business'; }
+    if (dpd_cms_token() !== '') { return 'cms'; }
+    return '';
+}
+
 function dpd_cms_request($path, $payload) {
     $allowed = array('calculate-order', 'create-order', 'orders');
     if (!in_array($path, $allowed, true)) { return new WP_Error('dpd_cms_path', 'Недопустимый метод API.'); }
