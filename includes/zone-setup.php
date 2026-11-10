@@ -83,6 +83,56 @@ function dpd_add_courier_to_zone($zone) {
 }
 
 /** Удаляет самовывоз из зоны, если он выключен в настройках. Возвращает число удалённых. */
+/**
+ * Приводит в порядок ВСЕ зоны, где может оказаться новосибирский адрес.
+ * Визард официального плагина умеет создавать собственную зону, поэтому одной
+ * зоны по имени недостаточно: без этого чекаут может попасть в пустую зону.
+ */
+function dpd_repair_all_zones() {
+    if (!class_exists('WC_Shipping_Zones')) { return array(); }
+    if (get_transient('dpd_repair_lock')) { return array(); }
+    set_transient('dpd_repair_lock', 1, 5 * MINUTE_IN_SECONDS);
+
+    $actions = array();
+    $zones = array();
+    foreach (WC_Shipping_Zones::get_zones() as $row) {
+        $zone = WC_Shipping_Zones::get_zone((int) $row['zone_id']);
+        if ($zone) { $zones[] = $zone; }
+    }
+
+    foreach ($zones as $zone) {
+        $name = (string) $zone->get_zone_name();
+        $locations = array();
+        foreach ($zone->get_zone_locations() as $loc) { $locations[] = $loc->type . ':' . $loc->code; }
+        $matches = (bool) preg_match('/Новосибирск/iu', $name) || in_array('country:RU', $locations, true) || in_array('state:RU-NVS', $locations, true);
+        if (!$matches) { continue; }
+
+        if (!dpd_zone_has_method($zone, 'dpd_courier') && dpd_add_courier_to_zone($zone)) {
+            $actions[] = 'курьер добавлен в зону «' . $name . '»';
+        }
+        $foreign = dpd_remove_foreign_courier($zone);
+        if ($foreign > 0) { $actions[] = 'убран чужой метод в зоне «' . $name . '» (' . $foreign . ')'; }
+        if (!(function_exists('dpd_pickup_enabled') && dpd_pickup_enabled())) {
+            $pickup = dpd_remove_pickup_from_zone($zone);
+            if ($pickup > 0) { $actions[] = 'убран самовывоз в зоне «' . $name . '» (' . $pickup . ')'; }
+        }
+    }
+
+    if ($actions) {
+        update_option('dpd_zone_setup_state', array('time' => time(), 'zone' => 'все зоны', 'actions' => $actions), false);
+    }
+    return $actions;
+}
+
+add_action('wp_loaded', 'dpd_repair_on_demand', 22);
+function dpd_repair_on_demand() {
+    if (!function_exists('is_cart') || !function_exists('is_checkout')) { return; }
+    if (is_admin() || is_cart() || is_checkout()) {
+        dpd_repair_all_zones();
+    }
+}
+
+/** Удаляет самовывоз из зоны, если он выключен в настройках. */
 function dpd_remove_pickup_from_zone($zone) {
     $removed = 0;
     foreach ($zone->get_shipping_methods(false) as $method) {
