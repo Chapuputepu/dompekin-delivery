@@ -86,6 +86,25 @@ function dpd_courier_instance_settings() {
     return $defaults;
 }
 
+/** Прямой расчёт по методам зоны, когда корзины нет (админка). */
+function dpd_rates_direct($package) {
+    $out = array();
+    if (!class_exists('WC_Shipping_Zones')) { return $out; }
+    $zone = WC_Shipping_Zones::get_zone_matching_package($package);
+    if (!$zone) { return $out; }
+    foreach ($zone->get_shipping_methods(true) as $method) {
+        if (!method_exists($method, 'calculate_shipping')) { continue; }
+        $method->rates = array();
+        try {
+            $method->calculate_shipping($package);
+        } catch (Throwable $e) {
+            continue;
+        }
+        foreach ((array) $method->rates as $rate) { $out[] = $rate; }
+    }
+    return $out;
+}
+
 /** Тарифы, которые WooCommerce реально отдаёт для тестового адреса. */
 function dpd_test_package_rates() {
     if (!function_exists('WC') || !WC()->shipping()) { return array('error' => 'WC()->shipping() недоступен.'); }
@@ -104,8 +123,20 @@ function dpd_test_package_rates() {
             'address_2' => '',
         ),
     );
-    $result = WC()->shipping()->calculate_shipping_for_package($package);
-    $rates = isset($result['rates']) && is_array($result['rates']) ? $result['rates'] : array();
+
+    try {
+        // calculate_shipping_for_package() обращается к WC()->cart. В админке корзины нет,
+        // и на WooCommerce 11 это падает фаталом. Поэтому без корзины считаем напрямую.
+        if (function_exists('WC') && WC()->cart) {
+            $result = WC()->shipping()->calculate_shipping_for_package($package);
+            $rates = isset($result['rates']) && is_array($result['rates']) ? $result['rates'] : array();
+        } else {
+            $rates = dpd_rates_direct($package);
+        }
+    } catch (Throwable $e) {
+        return array('rates' => array(), 'error' => 'WooCommerce: ' . $e->getMessage());
+    }
+
     $out = array();
     foreach ($rates as $rate) {
         $out[] = array(
