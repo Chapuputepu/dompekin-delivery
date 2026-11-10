@@ -163,9 +163,19 @@ add_action('admin_init', 'dpd_clean_foreign_courier', 11);function dpd_clean_for
     }
 }
 
-function dpd_maybe_provision_zone() {
+add_action('admin_post_dpd_fix_zone', 'dpd_admin_fix_zone');
+function dpd_admin_fix_zone() {
+    if (!current_user_can('manage_woocommerce')) { wp_die('Недостаточно прав.'); }
+    check_admin_referer('dpd_fix_zone');
+    delete_transient('dpd_zone_setup_lock');
+    dpd_maybe_provision_zone(true);
+    wp_safe_redirect(add_query_arg(array('page' => 'dompekin-delivery'), admin_url('admin.php')));
+    exit;
+}
+
+function dpd_maybe_provision_zone($force = false) {
     if (!class_exists('WC_Shipping_Zones')) { return; }
-    if (get_transient('dpd_zone_setup_lock')) { return; }
+    if (!$force && get_transient('dpd_zone_setup_lock')) { return; }
     set_transient('dpd_zone_setup_lock', 1, 6 * HOUR_IN_SECONDS);
 
     $zone = dpd_target_zone();
@@ -176,6 +186,10 @@ function dpd_maybe_provision_zone() {
     try {
         if (!dpd_zone_has_method($zone, 'dpd_courier') && dpd_add_courier_to_zone($zone)) {
             $actions[] = 'добавлен курьерский тариф';
+        }
+        if (!(function_exists('dpd_dispatch_is_external') && dpd_dispatch_is_external())) {
+            $foreign = dpd_remove_foreign_courier($zone);
+            if ($foreign > 0) { $actions[] = 'убран чужой курьерский метод (инстансов: ' . $foreign . ')'; }
         }
         if ($pickup_on) {
             if (!dpd_zone_has_method($zone, 'local_pickup') && dpd_add_pickup_to_zone($zone)) {

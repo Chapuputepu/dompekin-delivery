@@ -204,6 +204,12 @@ function dpd_admin_page() {
     echo '<input type="hidden" name="action" value="dpd_api_ping" />';
     submit_button('Проверить связь с API Достависты', 'secondary', 'submit', false);
     echo '</form>';
+
+    echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" style="margin:8px 0 14px">';
+    wp_nonce_field('dpd_fix_zone');
+    echo '<input type="hidden" name="action" value="dpd_fix_zone" />';
+    submit_button('Привести зону доставки в порядок', 'secondary', 'submit', false);
+    echo '</form>';
     $ping = get_transient('dpd_api_ping_' . get_current_user_id());
     if (is_array($ping)) {
         $color = !empty($ping['ok']) ? '#1a7f37' : '#b32d2e';
