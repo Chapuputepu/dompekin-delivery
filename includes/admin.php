@@ -179,6 +179,7 @@ function dpd_admin_save() {
 }
 
 function dpd_admin_page() {
+    if (!dpd_user_can_manage()) { wp_die('Недостаточно прав.'); }
     if (!current_user_can('manage_woocommerce')) { wp_die('Недостаточно прав.'); }
     $s = dpd_settings();
     $env = dpd_is_test() ? 'тестовая' : 'БОЕВАЯ';
@@ -245,10 +246,46 @@ function dpd_admin_page() {
     echo '<li>Плагин Достависта активен: ' . (class_exists('Dostavista') || function_exists('dostavista_init') ? 'да' : 'нет') . '</li>';
     echo '</ul><p><strong>Блокировка:</strong> повторная заявка по тому же заказу в той же среде не создаётся. При неизвестном результате автоматического повтора нет — требуется сверка в кабинете.</p>';
     echo '<p>Плагин не завершает заказ автоматически по событию «доставлено»: событие фиксируется, решение — за оператором. Автоматическое завершение будет добавлено после проверки callback на реальных событиях.</p>';
-    dpd_render_shipping_check();
-    if (function_exists('dpd_render_http_log')) { dpd_render_http_log(); }
-    if (function_exists('dpd_render_telegram_scan')) { dpd_render_telegram_scan(); }
-    dpd_render_geo_check();
-    dpd_render_diagnostics();
+    foreach (array('dpd_render_shipping_check', 'dpd_render_http_log', 'dpd_render_telegram_scan', 'dpd_render_geo_check', 'dpd_render_diagnostics') as $render) {
+        if (!function_exists($render)) { continue; }
+        try {
+            $render();
+        } catch (Throwable $e) {
+            echo '<p style="color:#b32d2e"><strong>Ошибка раздела ' . esc_html($render) . ':</strong> ' . esc_html($e->getMessage()) . ' (строка ' . (int) $e->getLine() . ')</p>';
+        }
+    }
+    echo '</div>';
+}
+
+/** Права: администратор или менеджер магазина. */
+function dpd_user_can_manage() {
+    return current_user_can('manage_options') || current_user_can('manage_woocommerce');
+}
+
+/** Отдельная страница проверки: не зависит от остального рендера панели. */
+add_action('admin_menu', 'dpd_register_check_page');
+function dpd_register_check_page() {
+    add_submenu_page(
+        'woocommerce',
+        'Проверка доставки',
+        'Проверка доставки',
+        'manage_options',
+        'dompekin-delivery-check',
+        'dpd_render_check_page'
+    );
+}
+
+function dpd_render_check_page() {
+    if (!dpd_user_can_manage()) { wp_die('Недостаточно прав.'); }
+    echo '<div class="wrap"><h1>Проверка доставки</h1>';
+    echo '<p>Расчёт по адресу, связь с API и состояние способов получения. Только чтение, заявки не создаются.</p>';
+    foreach (array('dpd_render_shipping_check', 'dpd_render_geo_check') as $render) {
+        if (!function_exists($render)) { continue; }
+        try {
+            $render();
+        } catch (Throwable $e) {
+            echo '<p style="color:#b32d2e"><strong>Ошибка раздела ' . esc_html($render) . ':</strong> ' . esc_html($e->getMessage()) . ' (строка ' . (int) $e->getLine() . ')</p>';
+        }
+    }
     echo '</div>';
 }
