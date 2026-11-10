@@ -21,7 +21,7 @@ function dpd_define_courier_method() {
             $this->id = 'dpd_courier';
             $this->instance_id = absint($instance_id);
             $this->method_title = 'Доставка Доставистой';
-            $this->method_description = 'Курьерская доставка по Новосибирску. Стоимость задаётся здесь; при сумме от порога — бесплатно.';
+            $this->method_description = 'Курьерская доставка по Новосибирску. Цена берётся из калькулятора Достависты по адресу; запасная цифра — только при сбое API.';
             $this->supports = array('shipping-zones', 'instance-settings', 'instance-settings-modal');
             $this->init();
         }
@@ -42,10 +42,10 @@ function dpd_define_courier_method() {
                     'default' => 'Доставка курьером',
                 ),
                 'cost' => array(
-                    'title' => 'Стоимость, ₽',
+                    'title' => 'Запасная цена, ₽',
                     'type' => 'number',
-                    'default' => '145',
-                    'description' => 'Берётся из тестового расчёта Достависты. Меняется без деплоя.',
+                    'default' => '250',
+                    'description' => 'Используется только если калькулятор Достависты не ответил. При нормальной работе цена берётся из калькулятора.',
                 ),
                 'free_from' => array(
                     'title' => 'Бесплатно от, ₽',
@@ -61,19 +61,19 @@ function dpd_define_courier_method() {
                 'price_mode' => array(
                     'title' => 'Как считать цену',
                     'type' => 'select',
-                    'default' => 'bands',
+                    'default' => 'live',
                     'options' => array(
-                        'bands' => 'По расстоянию (таблица ниже)',
-                        'live' => 'Онлайн-расчёт Достависты (кэш 15 мин)',
+                        'live' => 'Калькулятор Достависты (рекомендуется)',
+                        'bands' => 'По расстоянию (таблица)',
                         'fixed' => 'Фиксированная стоимость',
                     ),
-                    'description' => 'При онлайн-расчёте любая ошибка API возвращает табличную цену, а не пустой тариф.',
+                    'description' => 'По умолчанию цена = расчёт Достависты по адресу. Таблица и фикс — только как резерв.',
                 ),
                 'bands' => array(
                     'title' => 'Таблица: до_км | пеший | авто',
                     'type' => 'textarea',
-                    'default' => "2|250|320\n5|320|450\n10|450|600\n20|600|800",
-                    'description' => 'Одна строка — одна полоса расстояния. Пример: 2|250|320 значит «до 2 км: пеший 250 ₽, авто 320 ₽». Цифры нужно сверить с Доставистой.',
+                    'default' => '',
+                    'description' => 'Необязательно. Работает только в режиме «по расстоянию». Пустое поле — не используется.',
                 ),
             );
         }
@@ -114,7 +114,7 @@ function dpd_define_courier_method() {
             $free_from = (float) $this->get_option('free_from', 10000);
             $subtotal = $this->dpd_cart_subtotal($package);
 
-            $mode = (string) $this->get_option('price_mode', 'bands');
+            $mode = (string) $this->get_option('price_mode', 'live');
             $cost = null;
             $note = '';
 

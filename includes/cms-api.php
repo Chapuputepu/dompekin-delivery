@@ -112,7 +112,46 @@ function dpd_cms_request($path, $payload) {
     );
 }
 
-/** Заявка в формате cms-module 1.0. Возвращает массив или WP_Error. */
+/** Общее ядро заявки cms-module 1.0: используется и для расчёта на чекауте, и для вызова курьера. */
+function dpd_cms_payload_core($matter, $weight_kg, $vehicle_id, $origin, $dest_address, $dest_phone, $dest_name, $client_order_id = null) {
+    $zone = function_exists('wp_timezone') ? wp_timezone() : null;
+    $prep = function_exists('dpd_prep_minutes') ? dpd_prep_minutes() : 60;
+    $start = new DateTime('now', $zone);
+    $start->modify('+' . $prep . ' minutes');
+    $finish = new DateTime('now', $zone);
+    $finish->modify('+' . ($prep + 30) . ' minutes');
+
+    $delivery = array(
+        'point_type' => 'plain',
+        'address' => $dest_address,
+        'contact_person' => array('phone' => $dest_phone, 'name' => $dest_name),
+        'required_start_datetime' => $start->format('c'),
+        'required_finish_datetime' => $finish->format('c'),
+    );
+    if ($client_order_id !== null) { $delivery['client_order_id'] = (string) $client_order_id; }
+
+    return array(
+        'matter' => mb_substr($matter, 0, 400),
+        'total_weight_kg' => max(1, (int) ceil($weight_kg)),
+        'insurance_amount' => 0,
+        'vehicle_type_id' => (int) $vehicle_id,
+        // Оплата с баланса Достависты. Без этого поля API может выбрать наличные,
+        // и курьер потребует деньги с клиента, который уже оплатил заказ онлайн.
+        'payment_method' => 'non_cash',
+        'points' => array(
+            array(
+                'point_type' => 'plain',
+                'address' => $origin['address'],
+                'contact_person' => array('phone' => $origin['phone'], 'name' => 'Dompekin'),
+                'required_start_datetime' => $start->format('c'),
+                'required_finish_datetime' => $finish->format('c'),
+            ),
+            $delivery,
+        ),
+    );
+}
+
+/** Заявка для конкретного заказа WooCommerce. */
 function dpd_build_cms_payload($order, $origin, $vehicle_id) {
     $normalized = dpd_order_address($order);
     $address = $normalized['text'];
@@ -134,39 +173,15 @@ function dpd_build_cms_payload($order, $origin, $vehicle_id) {
             $weight += (float) $product->get_weight() * (float) $item->get_quantity();
         }
     }
-    $weight_kg = max(1, (int) ceil($weight));
 
-    $zone = function_exists('wp_timezone') ? wp_timezone() : null;
-    $prep = function_exists('dpd_prep_minutes') ? dpd_prep_minutes() : 60;
-    $start = new DateTime('now', $zone);
-    $start->modify('+' . $prep . ' minutes');
-    $finish = new DateTime('now', $zone);
-    $finish->modify('+' . ($prep + 30) . ' minutes');
+    return dpd_cms_payload_core('Заказ #' . $order->get_order_number(), $weight, $vehicle_id, $origin, $address, $phone, $name, $order->get_id());
+}
 
-    return array(
-        'matter' => mb_substr('Заказ #' . $order->get_order_number(), 0, 400),
-        'total_weight_kg' => $weight_kg,
-        'insurance_amount' => 0,
-        'vehicle_type_id' => (int) $vehicle_id,
-        // Оплата с баланса Достависты. Без этого поля API может выбрать наличные,
-        // и курьер потребует деньги с клиента, который уже оплатил заказ онлайн.
-        'payment_method' => 'non_cash',
-        'points' => array(
-            array(
-                'point_type' => 'plain',
-                'address' => $origin['address'],
-                'contact_person' => array('phone' => $origin['phone'], 'name' => 'Dompekin'),
-                'required_start_datetime' => $start->format('c'),
-                'required_finish_datetime' => $finish->format('c'),
-            ),
-            array(
-                'point_type' => 'plain',
-                'address' => $address,
-                'contact_person' => array('phone' => $phone, 'name' => $name),
-                'required_start_datetime' => $start->format('c'),
-                'required_finish_datetime' => $finish->format('c'),
-                'client_order_id' => (string) $order->get_id(),
-            ),
-        ),
-    );
+/** Расчёт на чекауте: заказа ещё нет, берём адрес и вес корзины. */
+function dpd_cms_quote_payload($address, $origin, $vehicle_id, $phone) {
+    $weight = 0.0;
+    if (function_exists('WC') && WC()->cart && method_exists(WC()->cart, 'get_cart_contents_weight')) {
+        $weight = (float) WC()->cart->get_cart_contents_weight();
+    }
+    return dpd_cms_payload_core('Расчёт доставки', $weight, $vehicle_id, $origin, $address, $phone, 'Получатель');
 }

@@ -128,6 +128,26 @@ function dpd_migrate_free_from() {
     }
 }
 
+/** Одноразово переводит уже созданный метод на расчёт калькулятором. */
+add_action('admin_init', 'dpd_migrate_live_mode', 13);
+function dpd_migrate_live_mode() {
+    if (get_option('dpd_live_mode_migrated_v1')) { return; }
+    if (!class_exists('WC_Shipping_Zones')) { return; }
+    $zone = dpd_target_zone();
+    if (!$zone) { return; }
+
+    foreach ($zone->get_shipping_methods(false) as $method) {
+        if ($method->id !== 'dpd_courier') { continue; }
+        $key = 'woocommerce_dpd_courier_' . (int) $method->instance_id . '_settings';
+        $stored = get_option($key, array());
+        if (!is_array($stored)) { $stored = array(); }
+        $stored['price_mode'] = 'live';
+        update_option($key, $stored, false);
+        update_option('dpd_live_mode_migrated_v1', 1, false);
+        return;
+    }
+}
+
 add_action('admin_init', 'dpd_clean_foreign_courier', 11);function dpd_clean_foreign_courier() {
     if (!class_exists('WC_Shipping_Zones')) { return; }
     if (function_exists('dpd_dispatch_is_external') && dpd_dispatch_is_external()) { return; }

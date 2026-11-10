@@ -104,7 +104,14 @@ function dpd_run_dispatch($order_id) {
     $order->update_meta_data('_dpd_state', 'created');
     if ($warnings) { $order->update_meta_data('_dpd_warnings', wp_json_encode($warnings)); }
 
-    $note = sprintf('Dompekin Delivery: заявка создана, ID %d. Среда: %s. Расчёт: %s ₽.', $carrier_id, dpd_is_test() ? 'тест' : 'боевая', number_format_i18n($amount, 2));
+    $note = sprintf('Dompekin Delivery: заявка создана, ID %d. Среда: %s. Расчёт Достависты: %s ₽.', $carrier_id, dpd_is_test() ? 'тест' : 'боевая', number_format_i18n($amount, 2));
+    $paid = method_exists($order, 'get_shipping_total') ? (float) $order->get_shipping_total() : 0.0;
+    if ($paid > 0) {
+        $note .= ' Клиент заплатил за доставку: ' . number_format_i18n($paid, 2) . ' ₽.';
+        if ($amount - $paid > 1) {
+            $note .= ' ВНИМАНИЕ: доставка дороже оплаченного на ' . number_format_i18n($amount - $paid, 2) . ' ₽.';
+        }
+    }
     if ($warnings) { $note .= ' Предупреждения Достависты: ' . wp_json_encode($warnings); }
     $order->add_order_note($note);
     $order->save();

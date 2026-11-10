@@ -47,16 +47,18 @@ function dpd_price_from_bands($bands, $distance, $vehicle, $fallback) {
     return (float) $last[$key];
 }
 
-/** Онлайн-расчёт Достависты с кэшем 15 минут. Никогда не бросает исключений. */
+/** Онлайн-расчёт Достависты с кэшем 15 минут. Работает в обоих контурах. */
 function dpd_quote_amount($address, $vehicle = 6) {
     $address = trim((string) $address);
     if ($address === '') { return array('state' => 'error', 'message' => 'Пустой адрес.'); }
-    if (dpd_active_token() === '') { return array('state' => 'error', 'message' => 'Не задан токен Достависты для текущей среды.'); }
+
+    $channel = function_exists('dpd_dispatch_channel') ? dpd_dispatch_channel() : (dpd_active_token() !== '' ? 'business' : '');
+    if ($channel === '') { return array('state' => 'error', 'message' => 'Нет токена Достависты для текущей среды.'); }
 
     $origin = dpd_origin();
     if (is_wp_error($origin)) { return array('state' => 'error', 'message' => $origin->get_error_message()); }
 
-    $key = 'dpd_quote_' . md5($address . '|' . (int) $vehicle);
+    $key = 'dpd_quote_' . md5($channel . '|' . $address . '|' . (int) $vehicle);
     $cached = get_transient($key);
     if (is_array($cached) && isset($cached['state'])) { return $cached; }
 
@@ -66,16 +68,21 @@ function dpd_quote_amount($address, $vehicle = 6) {
     }
     if ($phone === '') { $phone = $origin['phone']; }
 
-    $payload = array(
-        'matter' => 'Расчёт доставки',
-        'vehicle_type_id' => (int) $vehicle,
-        'points' => array(
-            array('address' => $origin['address'], 'contact_person' => array('phone' => $origin['phone'])),
-            array('address' => $address, 'contact_person' => array('phone' => $phone)),
-        ),
-    );
+    if ($channel === 'business') {
+        $payload = array(
+            'matter' => 'Расчёт доставки',
+            'vehicle_type_id' => (int) $vehicle,
+            'points' => array(
+                array('address' => $origin['address'], 'contact_person' => array('phone' => $origin['phone'])),
+                array('address' => $address, 'contact_person' => array('phone' => $phone)),
+            ),
+        );
+        $response = dpd_api_request('calculate-order', $payload);
+    } else {
+        $payload = dpd_cms_quote_payload($address, $origin, $vehicle, $phone);
+        $response = dpd_cms_request('calculate-order', $payload);
+    }
 
-    $response = dpd_api_request('calculate-order', $payload);
     if (is_wp_error($response)) {
         return array('state' => 'error', 'message' => $response->get_error_message());
     }
@@ -95,7 +102,12 @@ function dpd_quote_amount($address, $vehicle = 6) {
         return array('state' => 'error', 'message' => 'Достависта: ' . $message);
     }
 
-    $amount = dpd_parse_amount($data['order']['payment_amount'] ?? null);
+    $raw = $data['order']['payment_amount'] ?? null;
+    $amount = dpd_parse_amount($raw);
+    if ($amount === null && function_exists('dpd_amount_minor')) {
+        $minor = dpd_amount_minor($raw);
+        $amount = ($minor === null) ? null : ($minor / 100);
+    }
     if ($amount === null) { return array('state' => 'error', 'message' => 'Не удалось разобрать сумму расчёта.'); }
 
     $out = array('state' => 'ok', 'amount' => $amount);
