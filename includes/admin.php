@@ -241,6 +241,7 @@ function dpd_admin_page() {
     echo '<p>Плагин не завершает заказ автоматически по событию «доставлено»: событие фиксируется, решение — за оператором. Автоматическое завершение будет добавлено после проверки callback на реальных событиях.</p>';
     dpd_render_shipping_check();
     if (function_exists('dpd_render_http_log')) { dpd_render_http_log(); }
+    if (function_exists('dpd_render_telegram_scan')) { dpd_render_telegram_scan(); }
     dpd_render_geo_check();
     dpd_render_diagnostics();
     echo '</div>';
