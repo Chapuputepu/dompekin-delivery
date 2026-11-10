@@ -195,6 +195,8 @@ function dpd_admin_page() {
     echo '<li>Координаты ресторана: ' . (is_wp_error(dpd_restaurant_point()) ? 'не определены' : 'определены') . '</li>';
     $legacy = function_exists('dpd_legacy_state') ? dpd_legacy_state() : array();
     echo '<li>Старый автовызов темы: ' . (get_option('dp_dv_auto', 0) ? '<strong>включён — возможны дубли</strong>' : 'выключен') . ' · замок: снято из очереди ' . (int) ($legacy['removed'] ?? 0) . ', попыток запланировать заблокировано ' . (int) ($legacy['blocked'] ?? 0) . '</li>';
+    $content_fix = function_exists('dpd_content_state') ? dpd_content_state() : array();
+    echo '<li>Текст страницы «Доставка и оплата»: ' . (empty($content_fix['result']) ? 'правка ещё не выполнялась' : esc_html((string) $content_fix['result'])) . '</li>';
     echo '<li>Плагин Достависта активен: ' . (class_exists('Dostavista') || function_exists('dostavista_init') ? 'да' : 'нет') . '</li>';
     echo '</ul><p><strong>Блокировка:</strong> повторная заявка по тому же заказу в той же среде не создаётся. При неизвестном результате автоматического повтора нет — требуется сверка в кабинете.</p>';
     echo '<p>Плагин не завершает заказ автоматически по событию «доставлено»: событие фиксируется, решение — за оператором. Автоматическое завершение будет добавлено после проверки callback на реальных событиях.</p>';
