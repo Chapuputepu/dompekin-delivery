@@ -174,7 +174,8 @@ function dpd_admin_page() {
     $has_token = dpd_active_token() !== '';
     echo '<div class="wrap"><h1>Dompekin Delivery</h1>';
     if (isset($_GET['saved'])) { echo '<div class="notice notice-success"><p>Настройки сохранены.</p></div>'; }
-    echo '<p><strong>Среда: ' . esc_html($env) . '</strong> · Заявки создаёт: ' . (dpd_dispatch_is_external() ? 'официальный плагин Достависты' : 'наш плагин') . ' · Автовызов: ' . (dpd_enabled() ? '<strong>включён</strong>' : 'выключен') . ' · Токен: ' . ($has_token ? 'задан' : 'не задан') . '</p>';
+    $cms_token = function_exists('dpd_cms_token') ? dpd_cms_token() : '';
+    echo '<p><strong>Среда: ' . esc_html($env) . '</strong> · Заявки создаёт: ' . (dpd_dispatch_is_external() ? 'официальный плагин Достависты' : 'наш плагин') . ' · Автовызов: ' . (dpd_enabled() ? '<strong>включён</strong>' : 'выключен') . ' · CMS-токен: ' . ($cms_token !== '' ? '<strong>есть</strong>' : '<strong style="color:#b32d2e">нет</strong>') . ' · Токен business: ' . ($has_token ? 'задан' : 'не задан') . '</p>';
     echo '<p>Токен вводится только здесь и не отображается. Он не передаётся в чат и не пишется в отчёты. Ключи хранятся в базе сайта в открытом виде — доступ к базе должен быть ограничен.</p>';
     echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
     wp_nonce_field('dpd_save');
