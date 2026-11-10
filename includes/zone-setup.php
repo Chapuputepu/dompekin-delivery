@@ -107,11 +107,18 @@ function dpd_repair_all_zones() {
         $matches = (bool) preg_match('/Новосибирск/iu', $name) || in_array('country:RU', $locations, true) || in_array('state:RU-NVS', $locations, true);
         if (!$matches) { continue; }
 
-        if (!dpd_zone_has_method($zone, 'dpd_courier') && dpd_add_courier_to_zone($zone)) {
-            $actions[] = 'курьер добавлен в зону «' . $name . '»';
+        $own_pricing = function_exists('dpd_pricing_is_external') ? !dpd_pricing_is_external() : true;
+        if ($own_pricing) {
+            if (!dpd_zone_has_method($zone, 'dpd_courier') && dpd_add_courier_to_zone($zone)) {
+                $actions[] = 'курьер добавлен в зону «' . $name . '»';
+            }
+            $foreign = dpd_remove_foreign_courier($zone);
+            if ($foreign > 0) { $actions[] = 'убран чужой метод в зоне «' . $name . '» (' . $foreign . ')'; }
+        } else {
+            // Цену считает метод официального плагина: наш тариф убираем, чтобы не было двух.
+            $ours = dpd_remove_own_courier($zone);
+            if ($ours > 0) { $actions[] = 'убран наш тариф в зоне «' . $name . '» (' . $ours . ')'; }
         }
-        $foreign = dpd_remove_foreign_courier($zone);
-        if ($foreign > 0) { $actions[] = 'убран чужой метод в зоне «' . $name . '» (' . $foreign . ')'; }
         if (!(function_exists('dpd_pickup_enabled') && dpd_pickup_enabled())) {
             $pickup = dpd_remove_pickup_from_zone($zone);
             if ($pickup > 0) { $actions[] = 'убран самовывоз в зоне «' . $name . '» (' . $pickup . ')'; }
@@ -130,6 +137,17 @@ function dpd_repair_on_demand() {
     if (is_admin() || is_cart() || is_checkout()) {
         dpd_repair_all_zones();
     }
+}
+
+/** Убирает наш тариф из зоны, когда цену считает метод официального плагина. */
+function dpd_remove_own_courier($zone) {
+    $removed = 0;
+    foreach ($zone->get_shipping_methods(false) as $method) {
+        if ($method->id !== 'dpd_courier') { continue; }
+        $zone->delete_shipping_method((int) $method->instance_id);
+        $removed++;
+    }
+    return $removed;
 }
 
 /** Удаляет самовывоз из зоны, если он выключен в настройках. */
@@ -233,13 +251,17 @@ function dpd_maybe_provision_zone($force = false) {
 
     $actions = array();
     $pickup_on = function_exists('dpd_pickup_enabled') ? dpd_pickup_enabled() : false;
+    $own_pricing = function_exists('dpd_pricing_is_external') ? !dpd_pricing_is_external() : true;
     try {
-        if (!dpd_zone_has_method($zone, 'dpd_courier') && dpd_add_courier_to_zone($zone)) {
-            $actions[] = 'добавлен курьерский тариф';
-        }
-        if (!(function_exists('dpd_dispatch_is_external') && dpd_dispatch_is_external())) {
+        if ($own_pricing) {
+            if (!dpd_zone_has_method($zone, 'dpd_courier') && dpd_add_courier_to_zone($zone)) {
+                $actions[] = 'добавлен курьерский тариф';
+            }
             $foreign = dpd_remove_foreign_courier($zone);
             if ($foreign > 0) { $actions[] = 'убран чужой курьерский метод (инстансов: ' . $foreign . ')'; }
+        } else {
+            $ours = dpd_remove_own_courier($zone);
+            if ($ours > 0) { $actions[] = 'убран наш тариф: цену считает метод Достависты'; }
         }
         if ($pickup_on) {
             if (!dpd_zone_has_method($zone, 'local_pickup') && dpd_add_pickup_to_zone($zone)) {

@@ -15,6 +15,7 @@ function dpd_default_settings() {
         'prep_minutes' => '60',
         'pickup_enabled' => false,
         'dispatch_mode' => 'own',
+        'pricing_source' => 'external',
     );
 }
 
@@ -62,4 +63,12 @@ function dpd_prep_minutes() {
  */
 function dpd_dispatch_is_external() {
     return (string) dpd_settings()['dispatch_mode'] !== 'own';
+}
+
+/**
+ * Кто считает цену доставки: external — метод официального плагина, own — наш.
+ * Разделено с вызовом курьера: цену может считать их метод, а заявку создаём мы.
+ */
+function dpd_pricing_is_external() {
+    return (string) dpd_settings()['pricing_source'] !== 'own';
 }
