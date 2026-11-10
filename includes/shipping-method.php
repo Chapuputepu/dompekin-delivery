@@ -182,14 +182,26 @@ function dpd_register_shipping_method($methods) {
 }
 
 /**
- * Замок на самовывоз: если сторонний фильтр срезал ВСЕ тарифы (типичный случай —
- * адрес вне зоны доставки), возвращаем самовывоз из настроек зоны.
- * Работает только при пустом списке, поэтому не создаёт лишних вариантов.
+ * Доставляем только по Новосибирску. Пустой город (гость ещё не ввёл адрес) считаем своим:
+ * самовывоз не требует адреса, и чекаут не должен оставаться без вариантов.
+ */
+function dpd_is_local_destination($package) {
+    $city = isset($package['destination']['city']) ? trim((string) $package['destination']['city']) : '';
+    $postcode = isset($package['destination']['postcode']) ? trim((string) $package['destination']['postcode']) : '';
+    if ($city === '' && $postcode === '') { return true; }
+    if ($city !== '' && preg_match('/Новосибирск/iu', $city)) { return true; }
+    return (bool) preg_match('/^630\d{3}$/', $postcode);
+}
+
+/**
+ * Замок на самовывоз: если сторонний фильтр срезал ВСЕ тарифы в Новосибирске,
+ * возвращаем самовывоз из настроек зоны. Вне Новосибирска вариантов не добавляем.
  */
 add_filter('woocommerce_package_rates', 'dpd_ensure_pickup_rate', 999, 2);
 function dpd_ensure_pickup_rate($rates, $package) {
     if (!empty($rates)) { return $rates; }
     if (!class_exists('WC_Shipping_Rate') || !class_exists('WC_Shipping_Zones')) { return $rates; }
+    if (!dpd_is_local_destination($package)) { return $rates; }
 
     $zone = WC_Shipping_Zones::get_zone_matching_package($package);
     if (!$zone) { return $rates; }
