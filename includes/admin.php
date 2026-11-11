@@ -65,14 +65,14 @@ function dpd_admin_dispatch_now() {
     if (($_POST['confirm'] ?? '') !== 'yes') {
         set_transient(dpd_diag_key(), array('order_id' => $order_id, 'steps' => $order_id ? dpd_diagnose($order_id) : array(), 'relay' => null, 'message' => 'Создание отменено: нужно подтверждение.'), 600);
     } else {
-        dpd_run_dispatch($order_id);
+        dpd_run_dispatch($order_id, true);
         $lock = dpd_lock_read($order_id);
         $state = is_array($lock) ? ($lock['state'] ?? 'unknown') : 'none';
         $carrier = $lock['carrier_id'] ?? null;
         $messages = array(
             'created' => 'Заявка создана, ID ' . (int) $carrier . '.',
             'uncertain' => 'Результат неизвестен: заявка могла быть создана. Проверьте кабинет Достависты вручную; повторно не отправляем.',
-            'blocked' => 'Заявка не отправлена: см. заметку заказа с причиной.',
+            'blocked' => 'Заявка не отправлена: см. заметку заказа с причиной. Устраните причину (чаще всего — геокодер) и повторите кнопкой.',
             'reserved' => 'Попытка зарезервирована, но не завершена. Требуется сверка.',
             'none' => 'Отправка не запустилась: плагин выключен, нет токена, заказ не оплачен/не принят, либо среда не готова.',
         );

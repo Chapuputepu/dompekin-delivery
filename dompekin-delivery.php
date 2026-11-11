@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Dompekin Delivery
  * Description: Управляемый вызов курьера Достависты после принятия оплаченного заказа.
- * Version: 0.7.1
+ * Version: 0.7.2
  * Requires PHP: 7.4
  * Author: Dompekin
  */
@@ -11,7 +11,7 @@ if (!defined('ABSPATH')) { exit; }
 // Защита от двойной загрузки: если копия плагина уже загружена, вторая не объявляет функции повторно.
 if (defined('DPD_VERSION')) { return; }
 
-define('DPD_VERSION', '0.7.1');
+define('DPD_VERSION', '0.7.2');
 define('DPD_OPT', 'dpd_settings');
 define('DPD_DIR', plugin_dir_path(__FILE__));
 

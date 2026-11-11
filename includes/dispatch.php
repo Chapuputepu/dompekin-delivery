@@ -36,7 +36,7 @@ function dpd_is_delivery_order($order) {
     return (bool) $order->needs_shipping_address() || count($items) > 0;
 }
 
-function dpd_run_dispatch($order_id) {
+function dpd_run_dispatch($order_id, $manual = false) {
     // Даже если событие уже стояло в очереди — в режиме внешнего транспорта не создаём.
     if (function_exists('dpd_dispatch_is_external') && dpd_dispatch_is_external()) { return; }
     $order_id = (int) $order_id;
@@ -45,10 +45,17 @@ function dpd_run_dispatch($order_id) {
     $ready = dpd_order_ready($order);
     if (is_wp_error($ready)) { return; }
     $existing = dpd_lock_read($order_id);
-    if (is_array($existing)) { return; } // never re-dispatch an existing attempt
-
     $token = bin2hex(random_bytes(16));
-    if (!dpd_lock_reserve($order_id, $token)) { return; }
+    if (is_array($existing)) {
+        // Автоматический путь попытку не переигрывает никогда.
+        // Оператор — только состояние blocked: uncertain могла уже создать заявку,
+        // created — точно создала. Повтор по ним был бы дублем и двойной оплатой.
+        if (!$manual || ($existing['state'] ?? '') !== 'blocked') { return; }
+        if (!function_exists('dpd_lock_reopen') || !dpd_lock_reopen($order_id, $token)) { return; }
+        $order->add_order_note('Dompekin Delivery: повторный запуск оператором после блокировки.');
+    } elseif (!dpd_lock_reserve($order_id, $token)) {
+        return;
+    }
 
     // Persist uncertainty BEFORE any network request: a crash must never cause a blind retry.
     if (!dpd_lock_transition($order_id, $token, 'reserved', 'uncertain')) { return; }
@@ -59,17 +66,14 @@ function dpd_run_dispatch($order_id) {
     $address = dpd_delivery_address($order);
     if (is_wp_error($address)) { dpd_finish_blocked($order, $token, $address->get_error_message()); return; }
 
-    // Геокодер темы периодически отдаёт 'ошибка: http'. Раньше это блокировало заявку.
-    // Решение: при сбое геокодера едем авто (7) и пишем причину в заметку,
-    // не теряя оплаченный заказ из-за чужой поломки.
-    $geo_reason = '';
+    // Геокодер темы периодически отдаёт 'ошибка: http'. Решение владельца:
+    // без расстояния заявку НЕ создавать. Транспорт (пеший/авто) определяет расстояние,
+    // а угадывать его — значит платить за авто там, где хватило бы пешего.
+    // Заказ не теряется: причина уходит в заметку, после починки геокодера
+    // автовызов повторяют кнопкой в панели.
     $distance = dpd_distance_km($address);
-    if (is_wp_error($distance)) {
-        $vehicle_id = 7;
-        $geo_reason = $distance->get_error_message();
-    } else {
-        $vehicle_id = dpd_vehicle_for($distance);
-    }
+    if (is_wp_error($distance)) { dpd_finish_blocked($order, $token, $distance->get_error_message()); return; }
+    $vehicle_id = dpd_vehicle_for($distance);
 
     $channel = dpd_dispatch_channel();
     if ($channel === 'business') {
@@ -114,7 +118,6 @@ function dpd_run_dispatch($order_id) {
     if ($warnings) { $order->update_meta_data('_dpd_warnings', wp_json_encode($warnings)); }
 
     $note = sprintf('Dompekin Delivery: заявка создана, ID %d. Среда: %s. Расчёт Достависты: %s ₽.', $carrier_id, dpd_is_test() ? 'тест' : 'боевая', number_format_i18n($amount, 2));
-    if ($geo_reason !== '') { $note .= ' Транспорт: авто (7), потому что ' . $geo_reason; }
     $paid = method_exists($order, 'get_shipping_total') ? (float) $order->get_shipping_total() : 0.0;
     if ($paid > 0) {
         $note .= ' Клиент заплатил за доставку: ' . number_format_i18n($paid, 2) . ' ₽.';
