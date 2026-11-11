@@ -133,10 +133,3 @@ function dpd_delivery_address($order) {
     if (!$normalized['has_street_number']) { return new WP_Error('dpd_nonumber', 'В адресе клиента нет номера дома.'); }
     return $address;
 }
-�вал HTML-адрес без разделителей ("...домофон 17Новосибирск").
-    $normalized = dpd_order_address($order);
-    $address = $normalized['text'];
-    if ($address === '') { return new WP_Error('dpd_noaddress', 'В заказе нет адреса доставки.'); }
-    if (!$normalized['has_street_number']) { return new WP_Error('dpd_nonumber', 'В адресе клиента нет номера дома.'); }
-    return $address;
-}
