@@ -64,11 +64,11 @@ function dpd_run_dispatch($order_id) {
 
     $channel = dpd_dispatch_channel();
     if ($channel === 'business') {
-        $payload = dpd_build_payload($order, $origin, dpd_vehicle_for($distance));
+        $payload = dpd_build_payload($order, $origin, $vehicle_id);
         if (is_wp_error($payload)) { dpd_finish_blocked($order, $token, $payload->get_error_message()); return; }
         $calc = dpd_json(dpd_api_request('calculate-order', $payload));
     } else {
-        $payload = dpd_build_cms_payload($order, $origin, dpd_vehicle_for($distance));
+        $payload = dpd_build_cms_payload($order, $origin, $vehicle_id);
         if (is_wp_error($payload)) { dpd_finish_blocked($order, $token, $payload->get_error_message()); return; }
         $calc = dpd_json(dpd_cms_request('calculate-order', $payload));
     }
@@ -127,6 +127,13 @@ function dpd_finish_blocked($order, $token, $reason) {
 function dpd_delivery_address($order) {
     // Берём город + улица + дом из полей заказа.
     // Старый вариант склеивал HTML-адрес без разделителей ("...домофон 17Новосибирск").
+    $normalized = dpd_order_address($order);
+    $address = $normalized['text'];
+    if ($address === '') { return new WP_Error('dpd_noaddress', 'В заказе нет адреса доставки.'); }
+    if (!$normalized['has_street_number']) { return new WP_Error('dpd_nonumber', 'В адресе клиента нет номера дома.'); }
+    return $address;
+}
+�вал HTML-адрес без разделителей ("...домофон 17Новосибирск").
     $normalized = dpd_order_address($order);
     $address = $normalized['text'];
     if ($address === '') { return new WP_Error('dpd_noaddress', 'В заказе нет адреса доставки.'); }
