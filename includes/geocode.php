@@ -11,9 +11,10 @@ function dpd_cached_geocode_state($address) {
     $value = get_transient(dpd_geo_cache_key($address));
     if ($value === false) { return null; }
     if (is_array($value) && array_key_exists('found', $value)) {
-        return array('found' => (bool) $value['found']);
+        // present обязателен: диагностика различает «записи нет» и «есть результат».
+        return array('present' => true, 'found' => (bool) $value['found']);
     }
-    return array('found' => null);
+    return array('present' => true, 'found' => null);
 }
 
 function dpd_clear_address_cache($address) {

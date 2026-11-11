@@ -59,8 +59,17 @@ function dpd_run_dispatch($order_id) {
     $address = dpd_delivery_address($order);
     if (is_wp_error($address)) { dpd_finish_blocked($order, $token, $address->get_error_message()); return; }
 
+    // Геокодер темы периодически отдаёт 'ошибка: http'. Раньше это блокировало заявку.
+    // Решение: при сбое геокодера едем авто (7) и пишем причину в заметку,
+    // не теряя оплаченный заказ из-за чужой поломки.
+    $geo_reason = '';
     $distance = dpd_distance_km($address);
-    if (is_wp_error($distance)) { dpd_finish_blocked($order, $token, $distance->get_error_message()); return; }
+    if (is_wp_error($distance)) {
+        $vehicle_id = 7;
+        $geo_reason = $distance->get_error_message();
+    } else {
+        $vehicle_id = dpd_vehicle_for($distance);
+    }
 
     $channel = dpd_dispatch_channel();
     if ($channel === 'business') {
@@ -105,6 +114,7 @@ function dpd_run_dispatch($order_id) {
     if ($warnings) { $order->update_meta_data('_dpd_warnings', wp_json_encode($warnings)); }
 
     $note = sprintf('Dompekin Delivery: заявка создана, ID %d. Среда: %s. Расчёт Достависты: %s ₽.', $carrier_id, dpd_is_test() ? 'тест' : 'боевая', number_format_i18n($amount, 2));
+    if ($geo_reason !== '') { $note .= ' Транспорт: авто (7), потому что ' . $geo_reason; }
     $paid = method_exists($order, 'get_shipping_total') ? (float) $order->get_shipping_total() : 0.0;
     if ($paid > 0) {
         $note .= ' Клиент заплатил за доставку: ' . number_format_i18n($paid, 2) . ' ₽.';

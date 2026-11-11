@@ -55,6 +55,10 @@ function dpd_diagnose($order_id) {
     $originOk = is_array($origin) && isset($origin['lat'], $origin['lon']) && is_numeric($origin['lat']) && is_numeric($origin['lon']);
     $steps[] = array('step' => 'Координаты ресторана', 'status' => $originOk ? 'ok' : 'fail', 'detail' => $originOk ? 'Определены.' : 'НЕ определены: проблема в точке отправления, а не в адресе клиента.');
 
+    // Состояние кэша снимаем ДО геокодирования: dpd_geocode_report() сбрасывает
+    // отрицательный кэш, и после него оператор уже не увидит, что адрес был заблокирован.
+    $cache = $src['address'] === '' ? null : dpd_cached_geocode_state($src['address']);
+
     $geo = $src['address'] === '' ? array('state' => 'skipped') : dpd_geocode_report($src['address']);
     $map = array(
         'found' => array('ok', 'Адрес распознан.'),
@@ -70,11 +74,10 @@ function dpd_diagnose($order_id) {
     if ($geo['state'] === 'found' && $geo['precision'] !== null) { $detail .= ' Точность: ' . $geo['precision'] . '.'; }
     $steps[] = array('step' => 'Геокодирование адреса', 'status' => $state[0], 'detail' => $detail);
 
-    $cache = $src['address'] === '' ? null : dpd_cached_geocode_state($src['address']);
     if (is_array($cache)) {
-        if (!$cache['present']) { $steps[] = array('step' => 'Кэш адреса', 'status' => 'ok', 'detail' => 'Записи нет.'); }
+        if (empty($cache['present'])) { $steps[] = array('step' => 'Кэш адреса', 'status' => 'ok', 'detail' => 'Записи нет.'); }
         elseif ($cache['found'] === true) { $steps[] = array('step' => 'Кэш адреса', 'status' => 'ok', 'detail' => 'Есть положительный результат.'); }
-        else { $steps[] = array('step' => 'Кэш адреса', 'status' => 'warn', 'detail' => 'Есть сохранённый отрицательный результат до 30 дней. Он может блокировать адрес, который геокодер уже способен найти. Можно сбросить.'); }
+        else { $steps[] = array('step' => 'Кэш адреса', 'status' => 'warn', 'detail' => 'Был сохранён отрицательный результат до 30 дней: он может блокировать адрес, который геокодер уже способен найти. Можно сбросить.'); }
     }
 
     if ($geo['state'] === 'found' && $originOk) {

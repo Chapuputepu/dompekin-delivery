@@ -1,17 +1,17 @@
 <?php
 /**
  * Plugin Name: Dompekin Delivery
- * Description: Р Р€Р С—РЎР‚Р В°Р Р†Р В»РЎРЏР ВµР СРЎвЂ№Р в„– Р Р†РЎвЂ№Р В·Р С•Р Р† Р С”РЎС“РЎР‚РЎРЉР ВµРЎР‚Р В° Р вЂќР С•РЎРѓРЎвЂљР В°Р Р†Р С‘РЎРѓРЎвЂљРЎвЂ№ Р С—Р С•РЎРѓР В»Р Вµ Р С—РЎР‚Р С‘Р Р…РЎРЏРЎвЂљР С‘РЎРЏ Р С•Р С—Р В»Р В°РЎвЂЎР ВµР Р…Р Р…Р С•Р С–Р С• Р В·Р В°Р С”Р В°Р В·Р В°.
- * Version: 0.7.0
+ * Description: Управляемый вызов курьера Достависты после принятия оплаченного заказа.
+ * Version: 0.7.1
  * Requires PHP: 7.4
  * Author: Dompekin
  */
 if (!defined('ABSPATH')) { exit; }
 
-// Р вЂ”Р В°РЎвЂ°Р С‘РЎвЂљР В° Р С•РЎвЂљ Р Т‘Р Р†Р С•Р в„–Р Р…Р С•Р в„– Р В·Р В°Р С–РЎР‚РЎС“Р В·Р С”Р С‘: Р ВµРЎРѓР В»Р С‘ Р С”Р С•Р С—Р С‘РЎРЏ Р С—Р В»Р В°Р С–Р С‘Р Р…Р В° РЎС“Р В¶Р Вµ Р В·Р В°Р С–РЎР‚РЎС“Р В¶Р ВµР Р…Р В°, Р Р†РЎвЂљР С•РЎР‚Р В°РЎРЏ Р Р…Р Вµ Р С•Р В±РЎР‰РЎРЏР Р†Р В»РЎРЏР ВµРЎвЂљ РЎвЂћРЎС“Р Р…Р С”РЎвЂ Р С‘Р С‘ Р С—Р С•Р Р†РЎвЂљР С•РЎР‚Р Р…Р С•.
+// Защита от двойной загрузки: если копия плагина уже загружена, вторая не объявляет функции повторно.
 if (defined('DPD_VERSION')) { return; }
 
-define('DPD_VERSION', '0.7.0');
+define('DPD_VERSION', '0.7.1');
 define('DPD_OPT', 'dpd_settings');
 define('DPD_DIR', plugin_dir_path(__FILE__));
 
@@ -19,7 +19,7 @@ $dpd_includes = array('settings', 'geo-guard', 'address', 'geocode', 'origin', '
 foreach ($dpd_includes as $dpd_include) {
     $dpd_path = DPD_DIR . 'includes/' . $dpd_include . '.php';
     if (!is_readable($dpd_path)) {
-        if (function_exists('error_log')) { error_log('Dompekin Delivery: Р С•РЎвЂљРЎРѓРЎС“РЎвЂљРЎРѓРЎвЂљР Р†РЎС“Р ВµРЎвЂљ ' . $dpd_path); }
+        if (function_exists('error_log')) { error_log('Dompekin Delivery: отсутствует ' . $dpd_path); }
         return;
     }
     require_once $dpd_path;
@@ -34,7 +34,7 @@ function dpd_activate() {
     }
 }
 
-/** Р СњР С‘РЎвЂЎР ВµР С–Р С• Р Р…Р Вµ Р Р†РЎвЂ№Р С—Р С•Р В»Р Р…РЎРЏР ВµРЎвЂљРЎРѓРЎРЏ Р Т‘Р С• Р С–Р С•РЎвЂљР С•Р Р†Р Р…Р С•РЎРѓРЎвЂљР С‘ WordPress Р С‘ WooCommerce. */
+/** Ничего не выполняется до готовности WordPress и WooCommerce. */
 function dpd_boot() {
     if (!class_exists('WooCommerce')) { return; }
     if (is_admin()) { dpd_register_admin(); }
