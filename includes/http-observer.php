@@ -73,7 +73,7 @@ function dpd_observe_http_request($args, $url) {
 
 add_action('http_response', 'dpd_observe_http_response', 10, 3);
 function dpd_observe_http_response($response, $args, $url) {
-    if (!dpd_is_watched_url($url)) { return; }
+    if (!dpd_is_watched_url($url)) { return $response; }
     $status = is_array($response) && isset($response['response']['code']) ? (int) $response['response']['code'] : 0;
     $body = '';
     if (is_array($response) && isset($response['body'])) { $body = (string) $response['body']; }
@@ -88,6 +88,7 @@ function dpd_observe_http_response($response, $args, $url) {
         'body' => dpd_redact_text($body),
         'status' => $status,
     ));
+    return $response;
 }
 
 add_action('admin_post_dpd_clear_http_log', 'dpd_clear_http_log');
