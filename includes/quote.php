@@ -58,7 +58,8 @@ function dpd_quote_amount($address, $vehicle = 6) {
     $origin = dpd_origin();
     if (is_wp_error($origin)) { return array('state' => 'error', 'message' => $origin->get_error_message()); }
 
-    $key = 'dpd_quote_' . md5($channel . '|' . $address . '|' . (int) $vehicle);
+    $environment = dpd_is_test() ? 'test' : 'production';
+    $key = 'dpd_quote_' . md5($environment . '|' . $channel . '|' . $address . '|' . (int) $vehicle);
     $cached = get_transient($key);
     if (is_array($cached) && isset($cached['state'])) { return $cached; }
 
