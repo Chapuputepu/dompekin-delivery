@@ -38,6 +38,7 @@ function dpd_activate() {
 function dpd_boot() {
     if (!class_exists('WooCommerce')) { return; }
     if (is_admin()) { dpd_register_admin(); }
+    add_action('woocommerce_after_order_object_save', 'dpd_on_order_saved', 10, 2);
     add_action('added_post_meta', 'dpd_on_stage_meta', 10, 4);
     add_action('updated_post_meta', 'dpd_on_stage_meta', 10, 4);
     add_action('dpd_dispatch_order', 'dpd_run_dispatch', 10, 1);

@@ -1,6 +1,19 @@
 <?php
 if (!defined('ABSPATH')) { exit; }
 
+function dpd_on_order_saved($order, $data_store = null) {
+    if (!($order instanceof WC_Order) || !dpd_enabled()) { return; }
+    if (function_exists('dpd_dispatch_is_external') && dpd_dispatch_is_external()) { return; }
+    if (!$order->is_paid() || $order->get_meta('_dp_stage') !== 'cooking' || $order->get_meta('_dpd_carrier_id')) { return; }
+    if (function_exists('dpd_dispatch_channel') && dpd_dispatch_channel() === '') { return; }
+    $id = (int) $order->get_id();
+    if ($id <= 0 || is_array(dpd_lock_read($id))) { return; }
+    $args = array($id);
+    if (!wp_next_scheduled('dpd_dispatch_order', $args)) {
+        wp_schedule_single_event(time() + 5, 'dpd_dispatch_order', $args);
+    }
+}
+
 function dpd_on_stage_meta($meta_id, $object_id, $meta_key, $meta_value) {
     if ($meta_key !== '_dp_stage' || $meta_value !== 'cooking') { return; }
     // Заявки создаёт наш плагин. Официальный плагин автовызова не имеет — дублей нет.
@@ -8,6 +21,7 @@ function dpd_on_stage_meta($meta_id, $object_id, $meta_key, $meta_value) {
     if (!dpd_enabled()) { return; }
     if (function_exists('dpd_dispatch_channel')) { if (dpd_dispatch_channel() === '') { return; } } elseif (!dpd_active_token()) { return; }
     if (get_post_meta($object_id, '_dpd_carrier_id', true)) { return; }
+    if (function_exists('dpd_lock_read') && is_array(dpd_lock_read($object_id))) { return; }
     $args = array((int) $object_id);
     if (wp_next_scheduled('dpd_dispatch_order', $args)) { return; }
     wp_schedule_single_event(time() + 5, 'dpd_dispatch_order', $args);

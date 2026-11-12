@@ -64,11 +64,17 @@ function dpd_build_payload($order, $origin, $vehicle_id) {
     if ($address === '' || $phone === '') { return new WP_Error('dpd_missing', 'В заказе нет адреса или телефона получателя.'); }
     if (strlen($address) > 1000 || strlen($phone) > 80) { return new WP_Error('dpd_missing', 'Адрес или телефон слишком длинные.'); }
     $matter = 'Заказ #' . $order->get_order_number();
+    $zone = function_exists('wp_timezone') ? wp_timezone() : null;
+    $prep = function_exists('dpd_prep_minutes') ? dpd_prep_minutes() : 60;
+    $start = new DateTime('now', $zone);
+    $start->modify('+' . $prep . ' minutes');
+    $finish = clone $start;
+    $finish->modify('+30 minutes');
     return array(
         'matter' => mb_substr($matter, 0, 400),
         'vehicle_type_id' => $vehicle_id,
         'points' => array(
-            array('address' => $origin['address'], 'contact_person' => array('phone' => $origin['phone'])),
+            array('address' => $origin['address'], 'contact_person' => array('phone' => $origin['phone']), 'required_start_datetime' => $start->format('c'), 'required_finish_datetime' => $finish->format('c')),
             array('address' => $address, 'contact_person' => array('phone' => $phone)),
         ),
     );
