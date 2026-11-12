@@ -8,7 +8,7 @@ function dpd_on_order_saved($order, $data_store = null) {
     if (function_exists('dpd_dispatch_channel') && dpd_dispatch_channel() === '') { return; }
     $id = (int) $order->get_id();
     if ($id <= 0 || is_array(dpd_lock_read($id))) { return; }
-    $args = array($id);
+    $args = array($id, dpd_is_test() ? 'test' : 'production');
     if (!wp_next_scheduled('dpd_dispatch_order', $args)) {
         wp_schedule_single_event(time() + 5, 'dpd_dispatch_order', $args);
     }
@@ -22,9 +22,19 @@ function dpd_on_stage_meta($meta_id, $object_id, $meta_key, $meta_value) {
     if (function_exists('dpd_dispatch_channel')) { if (dpd_dispatch_channel() === '') { return; } } elseif (!dpd_active_token()) { return; }
     if (get_post_meta($object_id, '_dpd_carrier_id', true)) { return; }
     if (function_exists('dpd_lock_read') && is_array(dpd_lock_read($object_id))) { return; }
-    $args = array((int) $object_id);
+    $args = array((int) $object_id, dpd_is_test() ? 'test' : 'production');
     if (wp_next_scheduled('dpd_dispatch_order', $args)) { return; }
     wp_schedule_single_event(time() + 5, 'dpd_dispatch_order', $args);
+}
+
+/** A legacy or cross-environment event must never dispatch blindly. */
+function dpd_dispatch_scheduled($order_id, $environment = null) {
+    $current = dpd_is_test() ? 'test' : 'production';
+    if (!is_string($environment) || !in_array($environment, array('test', 'production'), true) || $environment !== $current) {
+        if (function_exists('error_log')) { error_log('Dompekin Delivery: scheduled dispatch skipped due to missing or changed environment. Order ID: ' . (int) $order_id); }
+        return;
+    }
+    dpd_run_dispatch($order_id, false);
 }
 
 function dpd_order_ready($order) {
