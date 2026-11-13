@@ -217,6 +217,8 @@ function dpd_migrate_live_mode() {
 }
 
 add_action('admin_init', 'dpd_clean_foreign_courier', 11);function dpd_clean_foreign_courier() {
+    // External pricing requires the official method even when our plugin dispatches.
+    if (function_exists('dpd_pricing_is_external') && dpd_pricing_is_external()) { return; }
     if (!class_exists('WC_Shipping_Zones')) { return; }
     if (function_exists('dpd_dispatch_is_external') && dpd_dispatch_is_external()) { return; }
     $zone = dpd_target_zone();
