@@ -44,6 +44,8 @@ function dpd_order_ready($order) {
     if (!$order->is_paid()) { return new WP_Error('dpd_unpaid', 'Оплата не подтверждена.'); }
     if ($order->get_meta('_dp_stage') !== 'cooking') { return new WP_Error('dpd_notaccepted', 'Заказ ещё не принят рестораном.'); }
     if ($order->get_meta('_dpd_carrier_id')) { return new WP_Error('dpd_exists', 'Доставка уже создана.'); }
+    if ($order->get_meta('_dp_dv_id')) { return new WP_Error('dpd_legacy_exists', 'У заказа уже есть заявка старой интеграции. Повтор запрещён.'); }
+    if ($order->get_meta('_dp_dv_run')) { return new WP_Error('dpd_legacy_pending', 'Старая интеграция отметила ожидающий вызов. Проверьте его перед повтором.'); }
     if (!dpd_is_delivery_order($order)) { return new WP_Error('dpd_nodelivery', 'Заказ оформлен как самовывоз, курьер не вызывается.'); }
     return true;
 }

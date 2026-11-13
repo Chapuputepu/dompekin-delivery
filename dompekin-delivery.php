@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Dompekin Delivery
  * Description: Управляемый вызов курьера Достависты после принятия оплаченного заказа.
- * Version: 0.7.3
+ * Version: 0.7.4
  * Requires PHP: 7.4
  * Author: Dompekin
  */
@@ -11,11 +11,11 @@ if (!defined('ABSPATH')) { exit; }
 // Защита от двойной загрузки: если копия плагина уже загружена, вторая не объявляет функции повторно.
 if (defined('DPD_VERSION')) { return; }
 
-define('DPD_VERSION', '0.7.3');
+define('DPD_VERSION', '0.7.4');
 define('DPD_OPT', 'dpd_settings');
 define('DPD_DIR', plugin_dir_path(__FILE__));
 
-$dpd_includes = array('settings', 'geo-guard', 'address', 'geocode', 'origin', 'api', 'cms-api', 'lock', 'dispatch', 'callback', 'admin', 'diagnostics', 'shipping-diagnostics', 'quote', 'shipping-method', 'zone-setup', 'legacy-guard', 'content-fix', 'http-observer', 'telegram-finder');
+$dpd_includes = array('settings', 'geo-guard', 'address', 'geocode', 'origin', 'api', 'cms-api', 'lock', 'dispatch', 'cafe-bridge', 'callback', 'admin', 'diagnostics', 'shipping-diagnostics', 'quote', 'shipping-method', 'zone-setup', 'legacy-guard', 'content-fix', 'http-observer', 'telegram-finder');
 foreach ($dpd_includes as $dpd_include) {
     $dpd_path = DPD_DIR . 'includes/' . $dpd_include . '.php';
     if (!is_readable($dpd_path)) {
